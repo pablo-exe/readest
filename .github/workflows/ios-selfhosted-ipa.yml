@@ -51,6 +51,28 @@ jobs:
       - name: Build unsigned IPA with self-hosted features
         run: pnpm tauri ios build --no-sign --ci
 
+      - name: Validate installable IPA structure
+        run: |
+          python3 - <<'PY'
+          import plistlib
+          import zipfile
+
+          ipa = 'apps/readest-app/src-tauri/gen/apple/build/arm64/Readest.ipa'
+          with zipfile.ZipFile(ipa) as archive:
+              corrupt = archive.testzip()
+              if corrupt:
+                  raise RuntimeError(f'Corrupt IPA entry: {corrupt}')
+              plist = plistlib.loads(archive.read('Payload/Readest.app/Info.plist'))
+              for key in ('CFBundleExecutable', 'CFBundleIdentifier', 'CFBundleInfoDictionaryVersion', 'CFBundleVersion'):
+                  if not plist.get(key):
+                      raise RuntimeError(f'Missing {key} in app Info.plist')
+              if plist.get('CFBundlePackageType') != 'APPL':
+                  raise RuntimeError('App bundle must have CFBundlePackageType=APPL')
+              executable = f"Payload/Readest.app/{plist['CFBundleExecutable']}"
+              if executable not in archive.namelist():
+                  raise RuntimeError(f'Missing app executable: {executable}')
+          PY
+
       - name: Upload IPA
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
