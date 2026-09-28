@@ -42,6 +42,9 @@ jobs:
         with:
           targets: aarch64-apple-ios
 
+      - name: Initialize Tauri iOS project
+        run: pnpm tauri ios init --ci --skip-targets-install
+
       - name: Build unsigned IPA with self-hosted features
         run: pnpm tauri ios build --no-sign --ci
 
