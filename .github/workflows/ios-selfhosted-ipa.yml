@@ -45,6 +45,9 @@ jobs:
       - name: Initialize Tauri iOS project
         run: pnpm tauri ios init --ci --skip-targets-install
 
+      - name: Seed the generated iOS Info.plist
+        run: cp apps/readest-app/src-tauri/Info-ios.plist apps/readest-app/src-tauri/gen/apple/Readest_iOS/Info.plist
+
       - name: Build unsigned IPA with self-hosted features
         run: pnpm tauri ios build --no-sign --ci
 
