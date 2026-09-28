@@ -2,6 +2,9 @@ name: Build self-hosted iOS IPA
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - codex/ios-selfhosted-ipa
 
 permissions:
   contents: read
