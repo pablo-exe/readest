@@ -1,3 +1,4 @@
+import { isWebDAVRemoteBook } from '@/services/webdavLibrary/remoteBook';
 import type { Book } from '@/types/book';
 import type { FileSystem } from '@/types/system';
 import { EXTS } from '@/libs/document';
@@ -8,6 +9,7 @@ import { isFeedBookUrl } from '@/services/rss/feedBookUrl';
 import { findABSServerById } from '@/store/absServerStore';
 import { createAbsEbookFetcher } from '@/services/audiobookshelf/ebookFetch';
 import { buildAbsEbookUrl, isAbsEbook, parseAbsFilePath } from '@/utils/audiobook';
+import { getWebDAVBookRequest } from '@/services/webdavLibrary/bookSource';
 
 export type BookContentSource =
   | { kind: 'managed'; path: string; base: 'Books'; legacy?: boolean }
@@ -69,6 +71,13 @@ export async function resolveBookContentSource(
         };
       }
     }
+  }
+
+  if (isWebDAVRemoteBook(book)) {
+    const request = getWebDAVBookRequest(book);
+    return request
+      ? { kind: 'url', path: request.url, base: 'None', fetcher: request.fetcher }
+      : { kind: 'missing' };
   }
 
   if (book.filePath) {

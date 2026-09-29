@@ -1,3 +1,4 @@
+import { isWebDAVRemoteBook } from '@/services/webdavLibrary/remoteBook';
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
 import type { Book } from '@/types/book';
 import type { EnvConfigType } from '@/services/environment';
@@ -93,6 +94,13 @@ export const useBookTransferActions = (
 
   const handleBookUpload = useCallback(
     async (book: Book, _syncBooks = true) => {
+      if (isWebDAVRemoteBook(book)) {
+        eventDispatcher.dispatch('toast', {
+          type: 'info',
+          message: _('This book stays on its WebDAV source and is not uploaded.'),
+        });
+        return false;
+      }
       const settingsNow = useSettingsStore.getState().settings;
       const backends = getActiveFileSyncBackends(settingsNow);
       const readest = isReadestCloudEnabled(settingsNow);
@@ -150,6 +158,7 @@ export const useBookTransferActions = (
 
   const handleBookDownload = useCallback(
     async (book: Book, downloadOptions: BookDownloadOptions = {}) => {
+      if (isWebDAVRemoteBook(book)) return false;
       const { redownload = false, queued = false, silent = false } = downloadOptions;
       const settingsNow = useSettingsStore.getState().settings;
       const backends = getActiveFileSyncBackends(settingsNow);

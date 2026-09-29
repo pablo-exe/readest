@@ -1,3 +1,4 @@
+import { isWebDAVRemoteBook } from '@/services/webdavLibrary/remoteBook';
 import { mergeTTSPacks } from '@/utils/ttsPacks';
 import { useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -87,7 +88,7 @@ export const useProgressSync = (bookKey: string) => {
 
   const pushConfig = async (bookKey: string, config: BookConfig | null) => {
     const book = getBookData(bookKey)?.book;
-    if (!config || !book || !user) return;
+    if (!config || !book || !user || isWebDAVRemoteBook(book)) return;
     const bookHash = book.hash;
     const metaHash = book.metaHash;
     const newConfig = { ...config, bookHash, metaHash };
@@ -106,7 +107,7 @@ export const useProgressSync = (bookKey: string) => {
 
   const pullConfig = async (bookKey: string) => {
     const book = getBookData(bookKey)?.book;
-    if (!user || !book) return;
+    if (!user || !book || isWebDAVRemoteBook(book)) return;
     const bookHash = bookKey.split('-')[0]!;
     const metaHash = book.metaHash;
     await syncConfigs([], bookHash, metaHash, 'pull');
@@ -131,6 +132,12 @@ export const useProgressSync = (bookKey: string) => {
   // pull is in flight or a retry timer is pending is a no-op.
   const pullWithRetry = useCallback(async () => {
     if (configPulled.current) return;
+    if (isWebDAVRemoteBook(getBookData(bookKey)?.book)) {
+      configPulled.current = true;
+      pullAttempt.current = 0;
+      clearPendingPullRetry();
+      return;
+    }
     if (pullInFlight.current) return;
     if (pullRetryTimer.current !== null) return;
     pendingResumePull.current = false;
@@ -160,6 +167,10 @@ export const useProgressSync = (bookKey: string) => {
   }, [bookKey]);
 
   const syncConfig = async () => {
+    if (isWebDAVRemoteBook(getBookData(bookKey)?.book)) {
+      configPulled.current = true;
+      return;
+    }
     if (!configPulled.current) {
       pullWithRetry();
     } else {
@@ -283,7 +294,7 @@ export const useProgressSync = (bookKey: string) => {
 
   // Push: auto-push progress when progress changes with a debounce
   useEffect(() => {
-    if (!progress?.location || !user) return;
+    if (!progress?.location || !user || isWebDAVRemoteBook(getBookData(bookKey)?.book)) return;
     handleAutoSync();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress?.location]);
@@ -300,7 +311,7 @@ export const useProgressSync = (bookKey: string) => {
   // Pull: pull progress once when the book is opened, with retry on failure
   useEffect(() => {
     const config = getConfig(bookKey);
-    if (!progress) return;
+    if (!progress || isWebDAVRemoteBook(getBookData(bookKey)?.book)) return;
     if (!hasPulledConfigOnce.current && initialPullConfig.current) {
       initialPullConfig.current.location = config?.location;
     }
@@ -329,7 +340,8 @@ export const useProgressSync = (bookKey: string) => {
     const book = getBookData(bookKey)?.book;
     const initialConfig = initialPullConfig.current;
     initialPullConfig.current = null;
-    if (!syncedConfigs || syncedConfigs.length === 0 || !config || !book) return;
+    if (!syncedConfigs || syncedConfigs.length === 0 || !config || !book || isWebDAVRemoteBook(book))
+      return;
 
     const bookHash = bookKey.split('-')[0]!;
     const metaHash = book.metaHash;

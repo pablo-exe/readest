@@ -5,6 +5,7 @@ import { useLibraryStore } from '@/store/libraryStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { getActiveFileSyncBackends } from '@/services/sync/cloudSyncProvider';
 import { isAbsEbook } from '@/utils/audiobook';
+import { isWebDAVRemoteBook } from '@/services/webdavLibrary/remoteBook';
 
 /**
  * Whether a third-party file mirror (WebDAV / Google Drive / S3 / OneDrive) is
@@ -40,6 +41,9 @@ export const useMakeBookAvailable = ({
   return useCallback(
     async (book: Book) => {
       if (isAbsEbook(book)) return true;
+      // The original bytes remain on WebDAV; this is a readable source, not a
+      // device download or a file-sync mirror copy.
+      if (isWebDAVRemoteBook(book)) return true;
       // A book with no cloud copy has nothing to fetch; the callers already
       // handle the case where such a book's local file is gone. `uploadedAt` is
       // not the whole story for a file backend: it is stamped by the sync engine,

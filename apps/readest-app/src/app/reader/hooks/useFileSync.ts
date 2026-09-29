@@ -13,6 +13,7 @@ import type { BookNote } from '@/types/book';
 import { recordFlow } from '@/services/sync/dataFlow/log';
 import { FileSyncEngine } from '@/services/sync/file/engine';
 import { FileSyncError } from '@/services/sync/file/provider';
+import { canSyncBookWithBackend } from '@/services/webdavLibrary/remoteBook';
 import { createAppLocalStore } from '@/services/sync/file/appLocalStore';
 import {
   createFileSyncProvider,
@@ -324,6 +325,7 @@ export const useFileSync = (bookKey: string) => {
 
     const pushedKinds: FileSyncBackendKind[] = [];
     for (const { kind, engine } of engines) {
+      if (!canSyncBookWithBackend(book, kind)) continue;
       if (!allowsPush(kind)) continue;
       const ps = sliceFor(kind);
       const wantProgress = ps?.syncProgress ?? true;
@@ -374,6 +376,7 @@ export const useFileSync = (bookKey: string) => {
     if (!book) return;
     const uploadedKinds: FileSyncBackendKind[] = [];
     for (const { kind, engine } of engines) {
+      if (!canSyncBookWithBackend(book, kind)) continue;
       if (!allowsPush(kind)) continue;
       if (!(sliceFor(kind)?.syncBooks ?? false)) continue;
       if (fileSyncedRef.current.has(kind)) continue;
@@ -424,6 +427,7 @@ export const useFileSync = (bookKey: string) => {
     const book = getBookData(bookKey)?.book;
     if (!book) return;
     for (const { kind, engine } of engines) {
+      if (!canSyncBookWithBackend(book, kind)) continue;
       if (!allowsPush(kind)) continue;
       if (coverSyncedRef.current.has(kind)) continue;
       coverSyncedRef.current.add(kind);
@@ -464,6 +468,7 @@ export const useFileSync = (bookKey: string) => {
     const pulledKinds: FileSyncBackendKind[] = [];
 
     for (const { kind, engine } of engines) {
+      if (!canSyncBookWithBackend(book, kind)) continue;
       if (!allowsPull(kind)) continue;
       const ps = sliceFor(kind);
       const wantProgress = ps?.syncProgress ?? true;

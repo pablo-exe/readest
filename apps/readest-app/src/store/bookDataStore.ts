@@ -1,3 +1,4 @@
+import { isWebDAVRemoteBook } from '@/services/webdavLibrary/remoteBook';
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { SystemSettings } from '@/types/settings';
@@ -164,7 +165,7 @@ export const useBookDataStore = create<BookDataState>((set, get) => ({
       ...original,
       progress: config.progress,
       updatedAt: now,
-      downloadedAt: original.downloadedAt || now,
+      downloadedAt: isWebDAVRemoteBook(original) ? null : original.downloadedAt || now,
     };
     const newLibrary = [updatedBook, ...library.slice(0, idx), ...library.slice(idx + 1)];
     setLibrary(newLibrary);
