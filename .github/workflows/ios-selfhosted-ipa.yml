@@ -45,6 +45,9 @@ jobs:
       - name: Initialize Tauri iOS project
         run: pnpm tauri ios init --ci --skip-targets-install
 
+      - name: Generate production app icons
+        run: pnpm tauri icon ../../data/icons/readest-book.png --ios-color '#fff'
+
       - name: Seed the generated iOS Info.plist
         run: cp apps/readest-app/src-tauri/Info-ios.plist apps/readest-app/src-tauri/gen/apple/Readest_iOS/Info.plist
 
@@ -53,30 +56,17 @@ jobs:
 
       - name: Validate installable IPA structure
         run: |
-          python3 - <<'PY'
-          import plistlib
-          import zipfile
-
-          ipa = 'apps/readest-app/src-tauri/gen/apple/build/arm64/Readest.ipa'
-          with zipfile.ZipFile(ipa) as archive:
-              corrupt = archive.testzip()
-              if corrupt:
-                  raise RuntimeError(f'Corrupt IPA entry: {corrupt}')
-              plist = plistlib.loads(archive.read('Payload/Readest.app/Info.plist'))
-              for key in ('CFBundleExecutable', 'CFBundleIdentifier', 'CFBundleInfoDictionaryVersion', 'CFBundleVersion'):
-                  if not plist.get(key):
-                      raise RuntimeError(f'Missing {key} in app Info.plist')
-              if plist.get('CFBundlePackageType') != 'APPL':
-                  raise RuntimeError('App bundle must have CFBundlePackageType=APPL')
-              executable = f"Payload/Readest.app/{plist['CFBundleExecutable']}"
-              if executable not in archive.namelist():
-                  raise RuntimeError(f'Missing app executable: {executable}')
-          PY
+          python3 apps/readest-app/scripts/validate-ios-ipa.py \
+            apps/readest-app/src-tauri/gen/apple/build/arm64/Readest.ipa \
+            apps/readest-app/src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset \
+            --icon-preview apps/readest-app/src-tauri/gen/apple/build/arm64/verified-app-icon.png
 
       - name: Upload IPA
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: readest-ios-selfhosted-unsigned
-          path: apps/readest-app/src-tauri/gen/apple/build/arm64/Readest.ipa
+          path: |
+            apps/readest-app/src-tauri/gen/apple/build/arm64/Readest.ipa
+            apps/readest-app/src-tauri/gen/apple/build/arm64/verified-app-icon.png
           if-no-files-found: error
           retention-days: 14
