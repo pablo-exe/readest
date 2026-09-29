@@ -7,7 +7,10 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { WebDAVLibraryDialog } from '@/services/webdavLibrary/WebDAVLibraryDialog';
 
 const mocks = vi.hoisted(() => ({ scan: vi.fn(), add: vi.fn(), load: vi.fn(async () => []) }));
-vi.mock('@/services/webdavLibrary/catalog', () => ({ scanWebDAVLibrary: mocks.scan }));
+vi.mock('@/services/webdavLibrary/catalog', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/webdavLibrary/catalog')>()),
+  listWebDAVLibraryFolder: mocks.scan,
+}));
 vi.mock('@/services/webdavLibrary/bookSource', () => ({ addWebDAVBook: mocks.add }));
 vi.mock('@/hooks/useTranslation', () => ({
   useTranslation: () => (key: string, values?: Record<string, unknown>) =>
@@ -55,7 +58,7 @@ beforeEach(() => {
       },
     },
   }));
-  mocks.scan.mockResolvedValue({ entries, failedDirectories: [] });
+  mocks.scan.mockResolvedValue({ entries });
 });
 afterEach(cleanup);
 
@@ -96,4 +99,18 @@ test('offers refresh after a listing failure', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
   await screen.findByRole('button', { name: 'Open Alpha' });
   expect(screen.queryByRole('alert')).toBeNull();
+});
+
+test('navigates folders and back without registering books', async () => {
+  mocks.scan.mockImplementation(async (_settings, path: string) => ({
+    entries: path === '/' ? [{ name: 'Authors', path: '/Authors', isDirectory: true }] : entries,
+  }));
+  render(<WebDAVLibraryDialog onClose={vi.fn()} onOpenBook={vi.fn()} />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Open folder Authors' }));
+  await screen.findByRole('button', { name: 'Open Alpha' });
+  expect(mocks.scan.mock.calls.at(-1)?.[1]).toBe('/Authors');
+  expect(mocks.add).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+  await screen.findByRole('button', { name: 'Open folder Authors' });
+  expect(mocks.scan.mock.calls.at(-1)?.[1]).toBe('/');
 });

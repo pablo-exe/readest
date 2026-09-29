@@ -15,7 +15,9 @@ sincroniza o presenta acciones. No hay una copia del lector ni del motor de sync
   biblioteca lo monta; la extensión no importa las implementaciones de rutas.
 - `WebDAVRemoteBookAction.tsx` encapsula la acción del explorador. El explorador
   solo lo monta, sin estados, handlers ni reglas de importación del fork.
-- `catalog.ts` recorre el servidor. No trasladar el escaneo a la página original
+- `WebDAVLibraryMenuItem.tsx` decide la visibilidad de la entrada fija del menú.
+  `SettingsMenu` solo monta el adaptador y reenvía el callback existente.
+- `catalog.ts` lista la carpeta seleccionada sin añadir `Libros` a la raíz. No trasladar el escaneo a la página original
   ni importar los libros de toda la colección al listar.
 
 Las pruebas `webdav-library-boundaries.test.ts` verifican estos límites. Si aparece
@@ -43,7 +45,7 @@ cambia la importación/cierre del lector, revisar expresamente los casos anterio
 
 ## Invariantes funcionales
 
-1. Los EPUB originales permanecen en `Libros/`; `Readest/` contiene referencias y
+1. Los EPUB originales permanecen en la carpeta configurada; `Readest/` contiene referencias y
    sidecars. Nunca subir un EPUB enlazado como parte de Full Sync.
 2. Las referencias no contienen URL con credenciales ni datos de autenticación.
 3. Solo WebDAV sincroniza estas referencias y sus sidecars, también en sync manual.
