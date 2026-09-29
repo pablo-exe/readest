@@ -8,6 +8,7 @@ const prefix = '@/services/webdavLibrary/';
 const adapters: Record<string, string[]> = {
   bookSource: ['services/bookContent.ts', 'services/bookService.ts'],
   WebDAVLibraryDialog: ['app/library/page.tsx'],
+  WebDAVLibraryMenuItem: ['app/library/components/SettingsMenu.tsx'],
   WebDAVRemoteBookAction: ['components/settings/integrations/WebDAVBrowsePane.tsx'],
 };
 
