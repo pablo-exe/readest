@@ -1,6 +1,7 @@
 import { Book, BookConfig, BookNote } from '@/types/book';
 import type { ProgressHandler } from '@/utils/transfer';
 import { isAudiobook } from '@/utils/audiobook';
+import { isWebDAVRemoteBook } from '@/services/webdavLibrary/remoteBook';
 import { FileHead, FileSyncError, FileSyncProvider } from './provider';
 import { LocalStore } from './localStore';
 import {
@@ -350,7 +351,9 @@ export class FileSyncEngine {
     // ABS books stream from the server and never have a local file to push —
     // guard here too, not just in syncLibrary's needsFilePush, since this is
     // also called directly by the explicit per-book Upload action.
-    if (isAudiobook(book)) return { uploaded: false, reason: 'no-source' };
+    if (isAudiobook(book) || isWebDAVRemoteBook(book)) {
+      return { uploaded: false, reason: 'no-source' };
+    }
     const dirPath = buildBookDirPath(this.provider.rootPath, book.hash);
     const path = buildBookFilePath(this.provider.rootPath, book);
     const dirs = [...ancestorsOf(`${dirPath}/.placeholder`), dirPath];
@@ -469,6 +472,7 @@ export class FileSyncEngine {
    * the explicit action.
    */
   async downloadBookFile(book: Book, onProgress?: ProgressHandler): Promise<boolean> {
+    if (isWebDAVRemoteBook(book)) return false;
     const dirPath = buildBookDirPath(this.provider.rootPath, book.hash);
     const entries = await this.provider.list(dirPath);
     const fileEntry = entries.find(
@@ -705,6 +709,7 @@ export class FileSyncEngine {
     // ABS books stream from the server and never have a file to push, in a
     // full sync or otherwise — their config/cover still sync normally below.
     const needsFilePush = (book: Book): boolean =>
+      !isWebDAVRemoteBook(book) &&
       options.syncBooks &&
       !isAudiobook(book) &&
       (fullSync ||
@@ -725,7 +730,9 @@ export class FileSyncEngine {
     const cloudCopyStamps = new Map<string, Book>();
     const stampCloudCopy = (hash: string): void => {
       const current = allBooksMap.get(hash);
-      if (!current || current.uploadedAt || current.deletedAt) return;
+      if (!current || current.uploadedAt || current.deletedAt || isWebDAVRemoteBook(current)) {
+        return;
+      }
       // A fresh object, never an in-place mutation: the caller's rows are the
       // ones React renders, and a mutated row is invisible to the memo.
       const stamped: Book = { ...current, uploadedAt: stampedAt };
@@ -1005,6 +1012,13 @@ export class FileSyncEngine {
       //    actual book file (the only entry that isn't config.json/cover.png).
       for (const hash of candidateHashes) {
         if (aborted()) break;
+        const indexedBook = allBooksMap.get(hash);
+        if (isWebDAVRemoteBook(indexedBook)) {
+          emptyDirs.delete(hash);
+          uploadedHashes.delete(hash);
+          remoteBooksToAdd.push(indexedBook);
+          continue;
+        }
         // Already inspected and file-less: don't re-list it — unless the
         // index says the file has since arrived (uploadedHashes), or a Full
         // Sync re-verifies everything.
@@ -1106,14 +1120,14 @@ export class FileSyncEngine {
               console.warn('file sync: config download failed', rb.hash, e);
             }
 
-            rb.uploadedAt = rb.uploadedAt ?? Date.now();
+            if (!isWebDAVRemoteBook(rb)) rb.uploadedAt = rb.uploadedAt ?? Date.now();
             rb.downloadedAt = null;
             await this.store.addBookToLibrary(rb);
             result.booksAdded += 1;
             syncedHashes.add(rb.hash);
             // Discovery confirmed the immutable file exists remotely. Record
             // it so future incremental passes do not HEAD-probe or re-discover it.
-            uploadedHashes.add(rb.hash);
+            if (!isWebDAVRemoteBook(rb)) uploadedHashes.add(rb.hash);
           } catch (e) {
             noteAbort(e);
             result.failures += 1;
@@ -1318,9 +1332,11 @@ export class FileSyncEngine {
       const buildRecords = () => ({
         uploadedHashes: Array.from(uploadedHashes).filter((hash) => {
           const b = indexByHash.get(hash);
-          return !!b && !b.deletedAt;
+          return !!b && !b.deletedAt && !isWebDAVRemoteBook(b);
         }),
-        emptyDirs: Array.from(emptyDirs),
+        emptyDirs: Array.from(emptyDirs).filter(
+          (hash) => !isWebDAVRemoteBook(indexByHash.get(hash)),
+        ),
       });
       const { uploadedHashes: nextUploadedHashes, emptyDirs: nextEmptyDirs } = buildRecords();
 
@@ -1341,6 +1357,7 @@ export class FileSyncEngine {
           if (!!r.deletedAt !== !!b.deletedAt) return true;
           if ((r.fileSyncDeletionRequestedAt ?? 0) !== (b.fileSyncDeletionRequestedAt ?? 0))
             return true;
+          if ((r.remoteSource?.updatedAt ?? 0) !== (b.remoteSource?.updatedAt ?? 0)) return true;
           return (b.updatedAt ?? 0) > (r.updatedAt ?? 0);
         });
 

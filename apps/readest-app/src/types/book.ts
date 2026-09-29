@@ -80,6 +80,8 @@ export interface ImportBookOptions {
   saveCover?: boolean;
   /** Whether to overwrite an existing file at the same path. Defaults to false. */
   overwrite?: boolean;
+  /** Whether different files with matching metadata should merge. Defaults to true. */
+  matchByMetadata?: boolean;
   /** Whether the import is transient (not stored long-term). Defaults to false. */
   transient?: boolean;
   /**
@@ -98,6 +100,14 @@ export interface ImportBookOptions {
 export interface Book {
   // if Book is a remote book we just lazy load the book content via url
   url?: string;
+  /** Stable provider reference for remote-in-place content; credentials stay in settings. */
+  remoteSource?: {
+    provider: 'webdav';
+    /** Decoded path relative to the configured WebDAV server URL. */
+    path: string;
+    /** Changes only when the provider path changes. */
+    updatedAt: number;
+  };
   // if Book is a transient local book we can load the book content via filePath
   filePath?: string;
   // Other on-disk paths that resolved to this same book — a watched folder

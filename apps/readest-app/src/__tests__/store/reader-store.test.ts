@@ -1,16 +1,18 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import type { FoliateView } from '@/types/view';
 import type { Insets } from '@/types/misc';
-import type { ViewSettings } from '@/types/book';
+import type { Book, ViewSettings } from '@/types/book';
 
 vi.mock('@/store/bookDataStore', async () => {
   const { create } = await import('zustand');
   return {
     useBookDataStore: create<{
       booksData: Record<string, unknown>;
+      getBookData: (id: string) => unknown;
       clearBookData: (keyOrId: string) => void;
-    }>((set) => ({
+    }>((set, get) => ({
       booksData: {},
+      getBookData: (id) => get().booksData[id],
       clearBookData: (keyOrId: string) =>
         set((state) => {
           const booksData = { ...state.booksData };
@@ -81,6 +83,29 @@ import { useReaderStore } from '@/store/readerStore';
 import { useBookDataStore, type BookData } from '@/store/bookDataStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { uniqueId } from '@/utils/misc';
+
+test('closing a WebDAV book cannot clear the data of a subsequent reopen', async () => {
+  let finishClose!: () => void;
+  const close = vi.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        finishClose = resolve;
+      }),
+  );
+  vi.mocked(useLibraryStore.getState().getBookByHash).mockReturnValue({
+    hash: 'remote',
+    remoteSource: { provider: 'webdav', path: '/Libros/a.epub', updatedAt: 1 },
+  } as Book);
+  useBookDataStore.setState({ booksData: { remote: { file: { close } } as unknown as BookData } });
+  seedViewState('remote-view');
+  useReaderStore.getState().clearViewState('remote-view');
+  await Promise.resolve();
+  const reopened = { file: new File([], 'new.epub') } as BookData;
+  useBookDataStore.setState({ booksData: { remote: reopened } });
+  finishClose();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(useBookDataStore.getState().booksData['remote']).toBe(reopened);
+});
 
 /**
  * Helper to seed a minimal ViewState in the store for a given key.

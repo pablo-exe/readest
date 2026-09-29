@@ -1,3 +1,4 @@
+import { isWebDAVRemoteBook } from '@/services/webdavLibrary/remoteBook';
 import { AppService, FileSystem, BaseDir, DeleteAction } from '@/types/system';
 import { Book } from '@/types/book';
 import {
@@ -191,6 +192,9 @@ export async function uploadBook(
   book: Book,
   onProgress?: ProgressHandler,
 ): Promise<void> {
+  if (isWebDAVRemoteBook(book)) {
+    throw new Error('Remote WebDAV books are not uploaded to Readest Cloud.');
+  }
   const completedFiles = { count: 0 };
   const coverExist = await fs.exists(getCoverFilename(book), 'Books');
 
@@ -250,6 +254,9 @@ export async function uploadBookCover(
   book: Book,
   onProgress?: ProgressHandler,
 ): Promise<void> {
+  if (isWebDAVRemoteBook(book)) {
+    throw new Error('Remote WebDAV book covers are not uploaded to Readest Cloud.');
+  }
   if (!(await fs.exists(getCoverFilename(book), 'Books'))) return;
   const completedFiles = { count: 0 };
   const handleProgress = createProgressHandler(1, completedFiles, onProgress);

@@ -111,6 +111,7 @@ import Spinner from '@/components/Spinner';
 import LibraryHeader from './components/LibraryHeader';
 import Bookshelf from './components/Bookshelf';
 import ImportMenuPopup from './components/ImportMenuPopup';
+import { WebDAVLibraryDialog } from '@/services/webdavLibrary/WebDAVLibraryDialog';
 import GroupHeader from './components/GroupHeader';
 import FailedImportsDialog, { FailedImport } from './components/FailedImportsDialog';
 import ImportFromFolderDialog, {
@@ -257,6 +258,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
   const [showWebSources, setShowWebSources] = useState(false);
   const [showImportNovel, setShowImportNovel] = useState(false);
   const [importMenuAnchor, setImportMenuAnchor] = useState<HTMLElement | null>(null);
+  const [showWebDAVLibrary, setShowWebDAVLibrary] = useState(false);
   const [loading, setLoading] = useState(false);
   // Seed from the library store: if we already have books in memory (the
   // common reader → library return path), treat the page as loaded
@@ -1957,6 +1959,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
             isTauriAppPlatform() ? () => setShowImportNovel(true) : undefined
           }
           onOpenCatalogManager={handleShowOPDSDialog}
+          onOpenWebDAVLibrary={() => setShowWebDAVLibrary(true)}
           onOpenFeeds={handleShowFeeds}
           onToggleSelectMode={() => handleSetSelectMode(!isSelectMode)}
           onSelectAll={handleSelectAll}
@@ -2120,6 +2123,7 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
             isTauriAppPlatform() ? () => setShowImportNovel(true) : undefined
           }
           onOpenCatalogManager={handleShowOPDSDialog}
+          onOpenWebDAVLibrary={() => setShowWebDAVLibrary(true)}
           onOpenFeeds={handleShowFeeds}
         />
       )}
@@ -2160,6 +2164,15 @@ const LibraryPageContent = ({ searchParams }: { searchParams: ReadonlyURLSearchP
       <CacheManagerWindow />
       {isSettingsDialogOpen && <SettingsDialog bookKey={''} />}
       {showCatalogManager && <CatalogDialog onClose={handleDismissOPDSDialog} />}
+      {showWebDAVLibrary && (
+        <WebDAVLibraryDialog
+          onClose={() => setShowWebDAVLibrary(false)}
+          onOpenBook={(book) => {
+            setShowWebDAVLibrary(false);
+            setPendingNavigationBookIds([book.hash]);
+          }}
+        />
+      )}
       {showFeeds && <FeedsView onClose={() => setShowFeeds(false)} />}
       <AddFeedModal
         isOpen={showAddFeed}

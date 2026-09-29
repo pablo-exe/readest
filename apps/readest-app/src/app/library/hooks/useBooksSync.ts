@@ -1,3 +1,4 @@
+import { isWebDAVRemoteBook } from '@/services/webdavLibrary/remoteBook';
 import { useCallback, useEffect, useRef } from 'react';
 import { Book } from '@/types/book';
 import { useSync } from '@/hooks/useSync';
@@ -54,6 +55,7 @@ export const useBooksSync = () => {
       // Demo books are the sample shelf we hand anonymous web visitors, not the
       // user's content — they never go to the cloud (issue #5049).
       .filter((book) => !isDemoBook(book))
+      .filter((book) => !isWebDAVRemoteBook(book))
       .filter(
         (book) =>
           !book.syncedAt ||
@@ -216,6 +218,12 @@ export const useBooksSync = () => {
         .library.filter(isDemoBook)
         .map((book) => book.hash),
     );
+    const webDAVHashes = new Set(
+      useLibraryStore
+        .getState()
+        .library.filter((book) => isWebDAVRemoteBook(book))
+        .map((book) => book.hash),
+    );
     const cloudBooks = syncedBooks.filter(
       // An ABS row arrives with its `abs://` filePath rebuilt from
       // `metadata.absSource` (transformBookFromDB). A row that still has none
@@ -224,7 +232,9 @@ export const useBooksSync = () => {
       // resolve the server or item it came from. Drop it rather than shelving
       // an unopenable entry.
       (book) =>
-        !demoHashes.has(book.hash) && !(isAudiobook(book) && !parseAbsFilePath(book.filePath)),
+        !demoHashes.has(book.hash) &&
+        !webDAVHashes.has(book.hash) &&
+        !(isAudiobook(book) && !parseAbsFilePath(book.filePath)),
     );
     if (!cloudBooks.length) return;
 

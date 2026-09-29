@@ -22,6 +22,7 @@ import { isTauriAppPlatform } from '@/services/environment';
 import { tauriDownload } from '@/utils/transfer';
 import { eventDispatcher } from '@/utils/event';
 import { ingestFile } from '@/services/ingestService';
+import { WebDAVRemoteBookAction } from '@/services/webdavLibrary/WebDAVRemoteBookAction';
 import {
   buildBasicAuthHeader,
   buildRequestUrl,
@@ -790,6 +791,7 @@ const WebDAVBrowsePane: React.FC<WebDAVBrowsePaneProps> = ({ settings, onUpdateS
                         )}
                       </button>
                     )}
+                    <WebDAVRemoteBookAction key={entry.path} settings={settings} entry={entry} />
                   </div>
                 </li>
               );

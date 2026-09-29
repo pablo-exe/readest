@@ -49,6 +49,8 @@ import {
   resolveBookContentSource,
   type BookFileContentSource,
 } from './bookContent';
+import { openWebDAVBookFile } from '@/services/webdavLibrary/bookSource';
+import { isWebDAVRemoteBook } from '@/services/webdavLibrary/remoteBook';
 
 /**
  * Import-time fallback key for a book already in the library, or undefined when
@@ -476,6 +478,7 @@ export async function importBook(
     saveBook = true,
     saveCover = true,
     overwrite = false,
+    matchByMetadata = true,
     transient = false,
     inPlace = false,
     lookupIndex,
@@ -636,7 +639,7 @@ export async function importBook(
     // Aggregate all books with same metaHash and format, deduplicating into one entry
     let bestConfigData: string | undefined;
     let mergeResult: BookMergeResult | undefined;
-    if (!transient && metaHash) {
+    if (!transient && metaHash && matchByMetadata) {
       if (!existingBook) {
         const metaKey = `${metaHash}:${format}`;
         let firstMatch = lookupIndex
@@ -1016,6 +1019,9 @@ async function openBookFileContent(
   const source = await resolveBookContentSource(fs, book);
   if (!isBookFileContentSource(source)) {
     throw new BookFileNotFoundError();
+  }
+  if (source.kind === 'url' && isWebDAVRemoteBook(book)) {
+    return { source, file: await openWebDAVBookFile(fs, book) };
   }
   const fetcher = source.kind === 'url' ? source.fetcher : undefined;
   return { source, file: await fs.openFile(source.path, source.base, undefined, fetcher) };

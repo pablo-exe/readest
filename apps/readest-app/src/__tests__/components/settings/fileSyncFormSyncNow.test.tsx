@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import type { SystemSettings } from '@/types/settings';
+import type { Book } from '@/types/book';
 import { useFileSyncStore } from '@/store/fileSyncStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -80,6 +81,18 @@ afterEach(() => {
 });
 
 describe('FileSyncForm — Sync now health reporting', () => {
+  test('manual non-WebDAV sync excludes WebDAV source references', async () => {
+    const remote = {
+      hash: 'remote',
+      remoteSource: { provider: 'webdav', path: '/Libros/a.epub', updatedAt: 1 },
+    } as Book;
+    const local = { hash: 'local' } as Book;
+    useLibraryStore.setState({ library: [remote, local], libraryLoaded: true });
+    render(<FileSyncForm kind='gdrive' stored={stored} persist={vi.fn(async () => {})} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Sync now' }));
+    await waitFor(() => expect(syncLibrary).toHaveBeenCalled());
+    expect(syncLibrary.mock.calls[0]![0]).toEqual([local]);
+  });
   test('a completed run clears a stale lastError', async () => {
     useFileSyncStore.getState().setLastError('webdav', 'server unreachable');
     renderForm();

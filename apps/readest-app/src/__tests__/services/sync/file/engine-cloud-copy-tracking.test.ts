@@ -70,6 +70,48 @@ const libraryWrite = (captured: Captured) =>
 const indexedBooks = (captured: Captured): Book[] =>
   (JSON.parse(libraryWrite(captured)!.body) as RemoteLibraryIndex).books;
 
+describe('WebDAV source references', () => {
+  const remote = makeBook('source', {
+    remoteSource: { provider: 'webdav', path: '/Libros/source.epub', updatedAt: 100 },
+  });
+
+  test('publishes the source and sidecars without uploading an EPUB, even in full sync', async () => {
+    const captured: Captured = { writes: [], deletedDirs: [] };
+    const loadBookFile = vi.fn(async () => ({ bytes: new ArrayBuffer(10), size: 10 }));
+    const markBooksUploaded = vi.fn();
+    await new FileSyncEngine(
+      fakeProvider({ captured }),
+      fakeStore({ loadBookFile, markBooksUploaded }),
+    ).syncLibrary([remote], { strategy: 'silent', syncBooks: true, fullSync: true, deviceId: 'd' });
+    expect(loadBookFile).not.toHaveBeenCalled();
+    expect(indexedBooks(captured)[0]?.remoteSource).toEqual(remote.remoteSource);
+    expect(markBooksUploaded).not.toHaveBeenCalled();
+    const index = JSON.parse(libraryWrite(captured)!.body) as RemoteLibraryIndex;
+    expect(index.uploadedHashes ?? []).not.toContain('source');
+    expect(index.emptyDirs ?? []).not.toContain('source');
+  });
+
+  test('discovers a source-only book without a binary in the sync directory', async () => {
+    const addBookToLibrary = vi.fn();
+    const provider = fakeProvider({
+      readText: async (path) =>
+        path.endsWith('library.json') ? JSON.stringify(makeIndex([remote])) : null,
+    });
+    await new FileSyncEngine(provider, fakeStore({ addBookToLibrary })).syncLibrary([], {
+      strategy: 'receive',
+      syncBooks: true,
+      deviceId: 'd',
+    });
+    expect(addBookToLibrary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hash: 'source',
+        remoteSource: remote.remoteSource,
+        downloadedAt: null,
+      }),
+    );
+  });
+});
+
 /**
  * #5084: "Remove from Device Only" must leave the book on the remote.
  *

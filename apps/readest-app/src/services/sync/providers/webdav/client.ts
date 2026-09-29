@@ -344,9 +344,16 @@ export const checkConnection = async (
 export const listDirectory = async (
   config: WebDAVConfig,
   rootPath: string,
+  decodedPath = false,
 ): Promise<WebDAVEntry[]> => {
-  const root = normalizeRootPath(rootPath);
-  const url = buildUrl(config.serverUrl, root);
+  const root = decodedPath
+    ? `/${rootPath.split('/').filter(Boolean).join('/')}`
+    : normalizeRootPath(rootPath);
+  // Entries returned by this client are decoded; callers walking those entries
+  // must escape literal percent characters rather than preserve URL escapes.
+  const url = decodedPath
+    ? `${trimTrailingSlash(config.serverUrl)}${root.split('/').map(encodeURIComponent).join('/')}`
+    : buildUrl(config.serverUrl, root);
   const fetchFn = getFetch();
   // Throw the same WebDAVRequestError taxonomy as the file-level helpers so the
   // provider layer can map list() failures to FileSyncError codes (auth /

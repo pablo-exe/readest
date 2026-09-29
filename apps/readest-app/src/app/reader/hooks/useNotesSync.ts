@@ -1,3 +1,4 @@
+import { isWebDAVRemoteBook } from '@/services/webdavLibrary/remoteBook';
 import { useCallback, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useSync } from '@/hooks/useSync';
@@ -139,7 +140,7 @@ export const useNotesSync = (bookKey: string) => {
   const getNewNotes = useCallback(() => {
     const config = getConfig(bookKey);
     const book = getBookData(bookKey)?.book;
-    if (!config?.location || !book || !user) return {};
+    if (!config?.location || !book || !user || isWebDAVRemoteBook(book)) return {};
 
     const bookNotes = config.booknotes ?? [];
     const newNotes = bookNotes.filter(
@@ -163,6 +164,7 @@ export const useNotesSync = (bookKey: string) => {
     throttle(
       () => {
         const book = getBookData(bookKey)?.book;
+        if (isWebDAVRemoteBook(book)) return;
         const newNotes = getNewNotes();
         if (newNotes.notes?.length) {
           populateXPointersForPush(newNotes.notes).then((enriched) => {
@@ -216,6 +218,7 @@ export const useNotesSync = (bookKey: string) => {
       if (!syncedNotes?.length || !config) return;
       const view = getView(bookKey);
       const book = getBookData(bookKey)?.book;
+      if (isWebDAVRemoteBook(book)) return;
       const newNotes = syncedNotes.filter(
         (note) => note.bookHash === book?.hash || note.metaHash === book?.metaHash,
       );

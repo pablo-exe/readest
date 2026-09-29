@@ -95,6 +95,18 @@ const setup = (appService: AppService | null = null) => {
   return { result, updateBook, getProgress: () => progressState };
 };
 
+it('never downloads a source-linked WebDAV EPUB from a file mirror or Readest Cloud', async () => {
+  routing.readestEnabled = true;
+  routing.backends = ['webdav', 'gdrive'];
+  const { result } = setup();
+  const book = makeBook({
+    remoteSource: { provider: 'webdav', path: '/Libros/a.epub', updatedAt: 1 },
+  });
+  expect(await result.current.handleBookDownload(book)).toBe(false);
+  expect(runFileBookDownload).not.toHaveBeenCalled();
+  expect(queueDownload).not.toHaveBeenCalled();
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   routing.readestEnabled = true;

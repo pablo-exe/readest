@@ -1,3 +1,4 @@
+import { mergeWebDAVSource } from '@/services/webdavLibrary/remoteBook';
 import { Book, BookConfig, BookNote } from '@/types/book';
 import { resolveReferencePageCount } from '@/utils/progress';
 import { bookGroupDiffers, pickFresherGroup } from '@/utils/book';
@@ -194,6 +195,7 @@ export const mergeBookMetadata = (local: Book, remote: Book): Book => {
   merged.groupId = group.groupId;
   merged.groupName = group.groupName;
   merged.groupUpdatedAt = group.groupUpdatedAt;
+  merged.remoteSource = mergeWebDAVSource(local, remote);
   // An absent `metadata` blob means "this side never had one" — a cloud-shelf
   // row, a discovery row, an old client — never "the user cleared it": nothing
   // in the app empties book.metadata. So it never wins, on any clock. Without
@@ -210,7 +212,10 @@ export const mergeBookMetadata = (local: Book, remote: Book): Book => {
  * we never re-apply identical metadata or bounce updates between devices.
  */
 export const isRemoteBookMetadataNewer = (local: Book, remote: Book): boolean =>
-  !remote.deletedAt && !local.deletedAt && (remote.updatedAt ?? 0) > (local.updatedAt ?? 0);
+  !remote.deletedAt &&
+  !local.deletedAt &&
+  ((remote.updatedAt ?? 0) > (local.updatedAt ?? 0) ||
+    (remote.remoteSource?.updatedAt ?? 0) > (local.remoteSource?.updatedAt ?? 0));
 
 /**
  * True when the remote copy is newer on ANY clock — book row (`updatedAt`),
@@ -226,7 +231,8 @@ export const isRemoteBookMetadataNewer = (local: Book, remote: Book): boolean =>
 export const isRemoteBookClockNewer = (local: Book, remote: Book): boolean =>
   (remote.updatedAt ?? 0) > (local.updatedAt ?? 0) ||
   (remote.readingStatusUpdatedAt ?? 0) > (local.readingStatusUpdatedAt ?? 0) ||
-  (remote.metadataUpdatedAt ?? 0) > (local.metadataUpdatedAt ?? 0);
+  (remote.metadataUpdatedAt ?? 0) > (local.metadataUpdatedAt ?? 0) ||
+  (remote.remoteSource?.updatedAt ?? 0) > (local.remoteSource?.updatedAt ?? 0);
 
 export const shouldApplyRemoteBookMetadata = (local: Book, remote: Book): boolean =>
   !remote.deletedAt && !local.deletedAt && isRemoteBookClockNewer(local, remote);
@@ -261,7 +267,8 @@ export const isRemoteBookMissingLocally = (local: Book, remote: Book): boolean =
   !remote.deletedAt &&
   !local.deletedAt &&
   (bookGroupDiffers(local, pickFresherGroup(local, remote, false)) ||
-    (!local.metadata && !!remote.metadata));
+    (!local.metadata && !!remote.metadata) ||
+    (!local.remoteSource && !!remote.remoteSource));
 
 /**
  * The row to PUBLISH into library.json for a book this device also holds,
@@ -282,6 +289,7 @@ export const isRemoteBookMissingLocally = (local: Book, remote: Book): boolean =
 export const resolvePublishedBook = (local: Book, remote: Book | undefined): Book => {
   if (!remote || remote.deletedAt || local.deletedAt) return local;
   const group = pickFresherGroup(local, remote, (remote.updatedAt ?? 0) > (local.updatedAt ?? 0));
+  const remoteSource = mergeWebDAVSource(local, remote);
   // The metadata group resolves on its own `metadataUpdatedAt` clock here too,
   // and as a GROUP (title / author / tags / blob move together) exactly as
   // `mergeBookMetadata` resolves it — otherwise the published row would pair
@@ -301,6 +309,7 @@ export const resolvePublishedBook = (local: Book, remote: Book | undefined): Boo
     group.groupId === local.groupId &&
     group.groupName === local.groupName &&
     group.groupUpdatedAt === local.groupUpdatedAt &&
+    remoteSource === local.remoteSource &&
     !remoteMetaNewer &&
     metadata === local.metadata
   ) {
@@ -309,6 +318,7 @@ export const resolvePublishedBook = (local: Book, remote: Book | undefined): Boo
   return {
     ...local,
     ...group,
+    remoteSource,
     ...(remoteMetaNewer
       ? {
           title: remote.title,

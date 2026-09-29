@@ -1,3 +1,4 @@
+import { filterBooksForBackend } from '@/services/webdavLibrary/remoteBook';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
 import React from 'react';
@@ -125,6 +126,7 @@ const FileSyncForm: React.FC<FileSyncFormProps> = ({
     // (including soft-deleted books): the engine tombstones deleted books in
     // library.json so deletions propagate, and keeping them in the input set
     // stops the discovery pass from re-downloading a book the user just deleted.
+    currentLibrary = filterBooksForBackend(currentLibrary, kind);
     const liveBookCount = currentLibrary.filter((b) => !b.deletedAt).length;
 
     // Lazily ensure a deviceId so the first cross-device sync attributes its

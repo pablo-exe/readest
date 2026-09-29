@@ -43,6 +43,11 @@ afterEach(() => {
 });
 
 describe('listDirectory metadata parsing', () => {
+  test('following decoded entries preserves literal percent escapes and filename whitespace', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(multistatus(''), { status: 207 }));
+    await listDirectory(config, '/books/100%20 real ', true);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://dav.example.com/books/100%2520%20real%20');
+  });
   test('requests creationdate in the PROPFIND body', async () => {
     fetchMock.mockResolvedValueOnce(new Response(multistatus(''), { status: 207 }));
     await listDirectory(config, '/books');

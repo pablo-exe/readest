@@ -1,3 +1,4 @@
+import { isWebDAVRemoteBook } from '@/services/webdavLibrary/remoteBook';
 import clsx from 'clsx';
 import React, { useState } from 'react';
 import {
@@ -138,9 +139,20 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
             <p className='text-base-content mb-2 line-clamp-2 break-words text-lg font-bold'>
               {formatTitle(book.title).replace(/\u00A0/g, ' ') || _('Untitled')}
             </p>
-            <p className='text-neutral-content line-clamp-1'>
-              {formatAuthors(book.author, book.primaryLanguage) || _('Unknown')}
-            </p>
+            <div className='flex min-w-0 items-center gap-2'>
+              <p className='text-neutral-content line-clamp-1'>
+                {formatAuthors(book.author, book.primaryLanguage) || _('Unknown')}
+              </p>
+              {isWebDAVRemoteBook(book) && (
+                <span
+                  className='badge badge-sm badge-outline shrink-0'
+                  title={book.remoteSource.path}
+                  aria-label={_('WebDAV source')}
+                >
+                  WebDAV
+                </span>
+              )}
+            </div>
           </div>
           <div className='flex flex-nowrap items-center gap-3 sm:gap-x-4'>
             {onEdit && (
@@ -152,13 +164,13 @@ const BookDetailView: React.FC<BookDetailViewProps> = ({
                 <MdOutlineEdit className='hover:fill-blue-500' />
               </button>
             )}
-            {book.uploadedAt && onDownload && (
+            {!isWebDAVRemoteBook(book) && book.uploadedAt && onDownload && (
               <button onClick={onDownload} title={_('Download from Cloud')}>
                 <MdOutlineCloudDownload className='fill-base-content' />
               </button>
             )}
             {/* A feed book is fileless — there is nothing to push (#5307). */}
-            {book.downloadedAt && !isFeedBook(book) && onUpload && (
+            {!isWebDAVRemoteBook(book) && book.downloadedAt && !isFeedBook(book) && onUpload && (
               <button onClick={onUpload} title={_('Upload to Cloud')}>
                 <MdOutlineCloudUpload className='fill-base-content' />
               </button>

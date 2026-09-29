@@ -9,6 +9,7 @@ import type { SystemSettings } from '@/types/settings';
 import type { UserPlan } from '@/types/quota';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useLibraryStore } from '@/store/libraryStore';
+import { filterBooksForBackend } from '@/services/webdavLibrary/remoteBook';
 import { useFileSyncStore } from '@/store/fileSyncStore';
 import { isWebAppPlatform } from '@/services/environment';
 import { hasValidWebDriveToken } from '@/services/sync/providers/gdrive/auth/webTokenStore';
@@ -93,7 +94,9 @@ const syncOneBackend = async (
   }
 
   const strategy = ps?.strategy ?? 'silent';
-  const result = await engine.syncLibrary(useLibraryStore.getState().library, {
+  const library = useLibraryStore.getState().library;
+  const booksForBackend = filterBooksForBackend(library, kind);
+  const result = await engine.syncLibrary(booksForBackend, {
     strategy: strategy === 'prompt' ? 'silent' : strategy,
     syncBooks: ps?.syncBooks ?? false,
     fullSync: false,

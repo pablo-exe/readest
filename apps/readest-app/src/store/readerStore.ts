@@ -13,6 +13,7 @@ import { Insets } from '@/types/misc';
 import { EnvConfigType } from '@/services/environment';
 import { FoliateView } from '@/types/view';
 import { isAbsEbook } from '@/utils/audiobook';
+import { isWebDAVRemoteBook } from '@/services/webdavLibrary/remoteBook';
 import { DocumentLoader, TOCItem } from '@/libs/document';
 import {
   isPseStreamFileName,
@@ -156,7 +157,16 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
     const id = key.split('-')[0]!;
     if (Object.keys(get().viewStates).some((k) => k.split('-')[0] === id)) return;
     const book = useLibraryStore.getState().getBookByHash(id);
-    if (book && isAbsEbook(book)) useBookDataStore.getState().clearBookData(id);
+    if (book && (isAbsEbook(book) || isWebDAVRemoteBook(book))) {
+      const bookFile = useBookDataStore.getState().getBookData(id)?.file as
+        | (File & { close?: () => Promise<void> })
+        | undefined;
+      // Evict before asynchronous cleanup so a quick reopen uses a fresh file.
+      useBookDataStore.getState().clearBookData(id);
+      void Promise.resolve()
+        .then(() => bookFile?.close?.())
+        .catch(() => {});
+    }
   },
   getViewState: (key: string) => get().viewStates[key] || null,
   initViewState: async (
