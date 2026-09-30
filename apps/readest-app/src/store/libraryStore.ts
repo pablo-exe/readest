@@ -1,3 +1,4 @@
+import { isWebDAVBookMissing } from '@/services/webdavLibrary/remoteBook';
 import { create } from 'zustand';
 import { Book, BookGroupType, ReadingStatus } from '@/types/book';
 import { EnvConfigType, isTauriAppPlatform } from '@/services/environment';
@@ -102,7 +103,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   setLibrary: (books) => {
     const coverThumbnails = new Map(get().coverThumbnails);
     const liveCoverHashes = new Map(
-      books.filter((book) => !book.deletedAt).map((book) => [book.hash, book.coverHash ?? null]),
+      books
+        .filter((book) => !book.deletedAt && !isWebDAVBookMissing(book))
+        .map((book) => [book.hash, book.coverHash ?? null]),
     );
     for (const [hash, thumbnail] of coverThumbnails) {
       if (liveCoverHashes.get(hash) !== thumbnail.coverHash) coverThumbnails.delete(hash);
@@ -111,7 +114,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       library: books,
       libraryLoaded: true,
       hashIndex: buildHashIndex(books),
-      visibleLibrary: books.filter((b) => !b.deletedAt),
+      visibleLibrary: books.filter((b) => !b.deletedAt && !isWebDAVBookMissing(b)),
       coverThumbnails,
     });
     get().refreshGroups();
@@ -150,7 +153,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     newLibrary[idx] = updatedBook;
     set({
       library: newLibrary,
-      visibleLibrary: newLibrary.filter((b) => !b.deletedAt),
+      visibleLibrary: newLibrary.filter((b) => !b.deletedAt && !isWebDAVBookMissing(b)),
     });
   },
 
@@ -170,7 +173,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     set({
       library: newLibrary,
       hashIndex: buildHashIndex(newLibrary),
-      visibleLibrary: newLibrary.filter((b) => !b.deletedAt),
+      visibleLibrary: newLibrary.filter((b) => !b.deletedAt && !isWebDAVBookMissing(b)),
     });
     await appService.saveLibraryBooks(newLibrary);
   },
@@ -194,7 +197,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         library,
         libraryLoaded: true,
         hashIndex: buildHashIndex(library),
-        visibleLibrary: library.filter((b) => !b.deletedAt),
+        visibleLibrary: library.filter((b) => !b.deletedAt && !isWebDAVBookMissing(b)),
       });
     }
 
@@ -202,7 +205,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     set({
       library: newLibrary,
       hashIndex: buildHashIndex(newLibrary),
-      visibleLibrary: newLibrary.filter((b) => !b.deletedAt),
+      visibleLibrary: newLibrary.filter((b) => !b.deletedAt && !isWebDAVBookMissing(b)),
     });
     refreshGroups();
 
@@ -237,7 +240,12 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     const groups: Record<string, string> = {};
 
     library.forEach((book) => {
-      if (book.groupName && book.groupName !== BOOK_UNGROUPED_NAME && !book.deletedAt) {
+      if (
+        book.groupName &&
+        book.groupName !== BOOK_UNGROUPED_NAME &&
+        !book.deletedAt &&
+        !isWebDAVBookMissing(book)
+      ) {
         groups[md5Fingerprint(book.groupName)] = book.groupName;
         let nextSlashIndex = book.groupName.indexOf('/', 0);
         while (nextSlashIndex > 0) {

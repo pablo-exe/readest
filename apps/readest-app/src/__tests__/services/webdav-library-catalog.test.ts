@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { WebDAVEntry } from '@/services/sync/providers/webdav/client';
 import { scanWebDAVLibrary } from '@/services/webdavLibrary/catalog';
 
@@ -17,39 +17,43 @@ const entry = (path: string, isDirectory = false): WebDAVEntry => ({
   isDirectory,
 });
 
+beforeEach(() => vi.clearAllMocks());
+
 describe('WebDAV library catalog', () => {
-  test('lists EPUBs recursively without reading book bytes or traversing outside Libros', async () => {
+  test('lists EPUBs recursively without reading book bytes or traversing outside the configured root', async () => {
     listDirectory.mockImplementation(async (_settings, path: string) => {
-      if (path === '/books/Libros')
+      if (path === '/books')
         return [
-          entry('/books/Libros/A.epub'),
-          entry('/books/Libros/sub', true),
+          entry('/books/Collection/A.epub'),
+          entry('/books/Collection/sub', true),
+          entry('/outside', true),
+          entry('/books/Readest/hidden.epub'),
           entry('/books/Readest', true),
-          entry('/books/Libros/../escape', true),
-          entry('/books/Libros/ignore.pdf'),
+          entry('/books/Collection/../escape', true),
+          entry('/books/Collection/ignore.pdf'),
         ];
       return [
-        entry('/books/Libros/sub/B.EPUB'),
-        entry('/books/Libros/sub', true),
-        entry('/books/Libros/A.epub'),
+        entry('/books/Collection/sub/B.EPUB'),
+        entry('/books/Collection/sub', true),
+        entry('/books/Collection/A.epub'),
       ];
     });
     const result = await scanWebDAVLibrary(settings);
     expect(result.entries.map((e) => e.name)).toEqual(['A.epub', 'B.EPUB']);
     expect(listDirectory.mock.calls.map((call) => call[1])).toEqual([
-      '/books/Libros',
-      '/books/Libros/sub',
+      '/books',
+      '/books/Collection/sub',
     ]);
   });
 
   test('reports unreadable subfolders instead of silently claiming a complete library', async () => {
     listDirectory.mockImplementation(async (_settings, path: string) => {
-      if (path === '/books/Libros')
-        return [entry('/books/Libros/A.epub'), entry('/books/Libros/private', true)];
+      if (path === '/books')
+        return [entry('/books/Collection/A.epub'), entry('/books/Collection/private', true)];
       throw new Error('permission denied');
     });
     const result = await scanWebDAVLibrary(settings);
-    expect(result.failedDirectories).toEqual(['/books/Libros/private']);
+    expect(result.failedDirectories).toEqual(['/books/Collection/private']);
     expect(result.entries).toHaveLength(1);
   });
 
@@ -62,4 +66,20 @@ describe('WebDAV library catalog', () => {
       name: 'AbortError',
     });
   });
+});
+
+test('accepts the mount root itself and excludes only its reserved sync folder', async () => {
+  listDirectory.mockImplementation(async (_settings, path: string) =>
+    path === '/'
+      ? [
+          entry('/root.epub'),
+          entry('/Readest', true),
+          entry('/Readest/hidden.epub'),
+          entry('/Other/Readest', true),
+        ]
+      : [entry('/Other/Readest/visible.epub')],
+  );
+  const result = await scanWebDAVLibrary({ ...settings, rootPath: '/' });
+  expect(result.entries.map((e) => e.path)).toEqual(['/root.epub', '/Other/Readest/visible.epub']);
+  expect(listDirectory.mock.calls.some((call) => call[1] === '/Readest')).toBe(false);
 });

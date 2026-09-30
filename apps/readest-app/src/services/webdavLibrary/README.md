@@ -2,80 +2,115 @@
 
 ## User flow
 
-Configure the existing WebDAV integration with a server URL and a root containing
-the sibling directories `Libros/` and `Readest/`. Open **+ → WebDAV Library** in
-the library header or the shelf's add tile. The catalog lists all EPUB files in
-`Libros/`, including nested folders. Search matches filenames, paths and metadata
-already known to Readest. Refresh rescans the server.
+Configure the existing WebDAV integration with its server URL and mounted root.
+The root can have any name, including `/`; no `Libros/` convention is required.
+On library startup, reconnect and foregrounding, the extension recursively scans
+that root for EPUBs and registers them in Readest's ordinary homepage. It excludes
+only the reserved `Readest/` sync directory immediately below the configured root.
+Nested directories with the same name elsewhere remain ordinary source folders.
 
-Listing uses PROPFIND only. Selecting a new book imports metadata, a cover and
-configuration, then opens the reader. It does not persist the EPUB in Books or
-upload it into Readest's sync directory. Known books open without reimporting.
-Metadata for unread books is represented by the filename; listing does not parse
-every EPUB or fetch every cover. The existing integration explorer remains usable
-for other files and for explicit downloads.
+Original EPUBs stay in their server folders. Registration uses the existing
+importer with `saveBook: false` and `matchByMetadata: false`: it saves metadata,
+cover and config, then links the server source. Directory discovery uses PROPFIND;
+initial metadata extraction reads each EPUB with authenticated HTTP ranges, or a
+native temporary download on servers without range support. Startup is not blocked
+and books appear progressively. The original integration explorer remains useful
+for explicit file operations; the separate single-book catalog dialog was removed.
 
-Reading prefers HTTP byte ranges. A server that does not support ranges falls
-back to a unique native Cache file that is removed on close. Cache is temporary,
-so this flow requires a connection. Source hashes detect replaced EPUB files.
-The feature supports the existing single WebDAV account configuration in Tauri
-(desktop, Android and iOS). It is not an offline-download or multi-account system.
+Folder paths relative to the mounted root become upstream groups/subgroups.
+The server controls this grouping and source membership. Metadata edits, reading
+progress and annotations still use upstream storage and WebDAV sidecar conflict
+handling in `Readest/`, subject to the existing integration's enabled/sync toggles.
+Configuring the mount is sufficient for discovery; it does not enable sync toggles.
 
-## Isolation and rebase seams
+## Reconciliation and preservation
 
-- `catalog.ts`: recursive discovery, four concurrent directory requests maximum,
-  deduplication, cancellation between requests, exclusion of paths outside Libros.
-  A failed root scan fails visibly; unreadable subfolders produce an incomplete
-  catalog warning. No global state or reader imports.
-- `WebDAVLibraryDialog.tsx`: catalog UI, filtering, virtualized rows, and lazy book
-  registration. Navigation is supplied by the existing library page callback.
-- `bookSource.ts`: authenticated content access, range validation, temporary native
-  fallback, content identity and metadata-only registration. Credentials are read
-  from existing settings and never embedded in the source reference or index.
-- `remoteBook.ts`: pure identification, backend eligibility and source merge
-  policies for generic sync and reader consumers. No runtime imports.
-- `WebDAVRemoteBookAction.tsx`: explorer button, import state and notifications;
-  the original explorer only mounts this adapter.
-- `Book.remoteSource`: additive wire-compatible source reference. The path is
-  decoded and relative to serverUrl, including a leading slash. Source clocks are
-  merged separately from the book metadata clock. No wire schema migration.
+`reconcile.ts` serializes scans and imports, waits for the persisted library and
+merges into the live store rather than replacing an old snapshot. Its device-local
+catalog uses server ETags, or size plus modification date, to skip unchanged
+metadata. Without usable validators it rechecks content identity on each scan.
+Completed metadata is checkpointed every 20 imports and at the end; an interrupted
+initial scan can safely repeat a few metadata reads on the next launch.
 
-The original library menu/header/page only forward an optional action and host
-the dialog. The existing WebDAV client adds an optional decoded-path argument
-for safely following its own decoded entries (including literal `%20` names).
+A moved EPUB with the same Readest content hash keeps its existing book identity,
+progress and annotations. Readest deduplicates identical content: copies in several
+folders share one row; an already linked path is preferred when still present.
+A replacement with a different hash registers as a new version. The former row is
+marked `remoteSource.missing`, retained with its sidecars, and excluded from the
+shelf. Confirmed removals behave the same way. No deletion tombstone or provider
+file deletion is issued by discovery. Reappearing content reuses its saved state.
+Annotations are not automatically transplanted to a different EPUB version.
 
-Generic book resolution opens a linked source through this adapter. The existing
-importer receives `saveBook: false` and `matchByMetadata: false`; other imports
-retain their defaults. Generic file sync preserves source references and discovers
-source-only index rows without requiring a binary. Automatic and manual sync
-entrypoints exclude linked books from other providers. Native Readest Cloud
-metadata, progress, notes and transfers exclude source-linked books. WebDAV
-sidecars still use the existing engine and conflict handling.
+A failed root scan leaves the existing library untouched. Failed subtrees and
+failed imports retain their prior source rows and report an incomplete refresh.
+Malformed/non-WebDAV XML is an error, never an empty catalog. XML entities in hrefs
+are decoded once before URL escapes, including `&amp;`, numeric entities and
+literal `%` names. A canceled scan cannot publish a reference after metadata import.
 
-Reader close evicts streamed book data synchronously, then closes the captured old
-file asynchronously. New reads therefore cannot reuse a closed file or lose their
-cache when an older close completes. Registration merges the selected book into
-the current shelf, avoiding replacement with a stale network-request snapshot.
+## Offline cache
 
-See [REBASE.md](./REBASE.md) for the integration map, invariants and post-rebase
-checks. Boundary tests keep transport/UI entrypoints restricted to their adapters.
+Native desktop, Android and iOS reading stores a complete EPUB before opening it,
+checks its length when the transfer provides one and checks the existing partial
+MD5 content identity. This adds a full transfer on the first open of each book;
+subsequent opens use the local file without contacting the server. Offline reading
+is guaranteed only after the first download finishes successfully.
 
-## Verification
+`cache.ts` keeps the five most recently opened books per mounted library. Open
+handles are pinned: temporarily more than five files can exist while older books
+are still open; eviction runs again on close. Interrupted/unpublished downloads
+are disposable and cleaned on a subsequent cache open. Covers and configurations
+are independent of this five-EPUB limit and are never evicted by the cache.
 
-Regression tests cover catalog traversal, unreadable folders, cancellation,
-path encoding, range authentication, truncated ranges, fallback cleanup,
-temporary-name limits, concurrent library changes, source-only sync discovery,
-manual provider isolation, rapid reader reopening and the catalog read flow.
+EPUB cache files live in the app's `Data/webdav-library/<mount-id>/`, outside synced
+`Books/` and outside the OS-managed Cache directory. The localStorage manifest
+`readest:webdav-cache:v1:<mount-id>` is published only after verification; the
+catalog key is `readest:webdav-catalog:v1:<mount-id>`. Neither contains credentials.
+Mount IDs hash server URL, username and root; passwords remain exclusively in the
+existing settings. Clearing app storage loses the disposable cache/index, not the
+server EPUBs. Restoring only sidecars requires a new scan; preserving offline cache
+across device restoration also requires its local files and WebView storage.
+Browser builds retain the prior remote-range reader; the automatic library and
+persistent offline cache are supported on native apps.
 
-Run from the application directory:
+## Isolation and validation
+
+All discovery, reconciliation, startup and cache behavior lives in this folder.
+The library page mounts one hook; upstream bookshelf/store filtering uses only the
+pure `remoteBook.ts` policy. Content resolution uses the existing `bookSource.ts`
+adapter. No reader, cards, groups or sync engine are copied.
+
+From `apps/readest-app`:
 
 ```text
-pnpm test --run src/__tests__/services/webdav-library-catalog.test.ts src/__tests__/services/webdav-library-source.test.ts src/__tests__/components/webdav-library-dialog.test.tsx src/__tests__/components/settings/fileSyncFormSyncNow.test.tsx src/__tests__/services/sync/file src/__tests__/store/reader-store.test.ts
+pnpm test --run src/__tests__/services/webdav-library src/__tests__/services/webdav-list-directory.test.ts src/__tests__/services/webdav-encode-path.test.ts src/__tests__/services/book-content-source.test.ts src/__tests__/services/sync/file src/__tests__/store/reader-store.test.ts src/__tests__/app/library
 pnpm lint
-pnpm test:browser src/__tests__/components/webdav-library-dialog.browser.test.tsx
+pnpm test --run
 ```
 
-Native HTTP/Cache behavior also needs verification against a real WebDAV server
-on each target device. Unit mocks verify the contract, not the native transport.
-The browser checks exercise the real dialog and virtualized list at desktop and
-mobile sizes, including e-ink mode, with a simulated 1,000-book catalog.
+Tests use synthetic entries/EPUB bytes and mocked native transport. They cover
+arbitrary mount roots, reserved-directory exclusion, XML/URL encoding, incremental
+scans, moves, replacements, incomplete scans, grouping, startup/reconnect,
+cancellation, persisted offline reuse, verification, eviction and pinned handles.
+Native filesystem/HTTP behavior still requires device checks on iOS and Android;
+unit tests do not establish that an IPA/APK has been built or installed.
+
+See [REBASE.md](./REBASE.md) for the upstream integration points and rollback.
+
+## Local validation — 2026-09-30
+
+Validated in an exported checkout with synthetic WebDAV responses and temporary
+storage, without contacting the production server. The 33 feature tests passed,
+including a project EPUB fixture through the actual importer and filesystem:
+cover/config persisted, no managed EPUB, and cache reopening without network.
+The broader affected-area run covered 677 tests; one unrelated novel-dialog test
+hit its timeout under concurrent load and its complete 12-test file passed when
+rerun alone. TypeScript and Biome lint passed without warnings.
+
+The full suite ran 1,019 files: 12,057 tests passed, with 36 existing failures
+reproduced against the pre-change checkout, plus the new malformed-XML regression
+while its fix was being prepared. That regression passes with the final parser.
+Three PDF suites additionally required generated vendor resources in the isolated
+checkout; after `pnpm setup-vendors`, all 51 tests in those files passed. Remaining
+baseline failures concern generated ZIP/Blob fixtures in documents, dictionaries
+and novel conversion. The full suite is therefore not claimed entirely green.
+No native IPA/APK build, device install or production deployment was performed.

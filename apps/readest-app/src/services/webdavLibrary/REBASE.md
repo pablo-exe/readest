@@ -1,70 +1,59 @@
 # Mantenimiento del fork WebDAV
 
-La extensión vive en esta carpeta. Los archivos originales contienen adaptaciones
-pequeñas en los puntos donde Readest resuelve contenido, publica metadatos,
-sincroniza o presenta acciones. No hay una copia del lector ni del motor de sync.
+La lógica del fork vive en esta carpeta. Se reutilizan el importador, la biblioteca,
+los grupos, el lector y el motor de sincronización de upstream.
 
-## Límites que deben conservarse
+## Adaptaciones que conservar al hacer rebase
 
-- `remoteBook.ts` solo importa tipos. Es la entrada permitida desde cualquier
-  consumidor original: identifica libros enlazados, selecciona proveedores y
-  combina referencias usando su propio reloj. No añadir stores, HTTP o React.
-- `bookSource.ts` es el adaptador de contenido e importación. Fuera de la extensión,
-  solo lo usan `services/bookContent.ts` y `services/bookService.ts`.
-- `WebDAVLibraryDialog.tsx` recibe la navegación como callback. Solo la página de
-  biblioteca lo monta; la extensión no importa las implementaciones de rutas.
-- `WebDAVRemoteBookAction.tsx` encapsula la acción del explorador. El explorador
-  solo lo monta, sin estados, handlers ni reglas de importación del fork.
-- `catalog.ts` recorre el servidor. No trasladar el escaneo a la página original
-  ni importar los libros de toda la colección al listar.
-
-Las pruebas `webdav-library-boundaries.test.ts` verifican estos límites. Si aparece
-una integración nueva, revisar su necesidad antes de ampliar la lista de entradas.
-
-## Qué conservar al resolver conflictos
-
-| Zona original | Adaptación del fork que hay que conservar |
+| Zona de upstream | Adaptación |
 | --- | --- |
-| `types/book.ts` | `remoteSource` opcional y `matchByMetadata` con valor por defecto compatible |
-| Menú, cabecera y página de biblioteca | Callback opcional y montaje del diálogo; navegación por la función existente |
-| Explorador WebDAV | Importación y montaje de `WebDAVRemoteBookAction` |
-| Cliente WebDAV | Opción de rutas decodificadas: escapar `%` literal y conservar espacios de nombres reales |
-| Resolución de contenido e importación | Abrir por el adaptador y usar importación sin copia del EPUB ni unión por metadatos |
-| Motor de sync y merge | Descubrir referencias sin binario, no subir EPUB enlazados, conservar el reloj de la fuente |
-| Entradas de sync manual y automática | Usar `filterBooksForBackend` y `canSyncBookWithBackend` |
-| Sync nativo de libros, notas y progreso | Excluir libros identificados por `isWebDAVRemoteBook`, incluidos callbacks en vuelo |
-| Disponibilidad, datos y cierre del lector | No descargar desde otros proveedores; invalidar datos antes de cerrar el archivo antiguo |
-| Acciones y detalles del libro | Identificar WebDAV y ocultar transferencias de binarios incompatibles |
+| `types/book.ts` | `remoteSource` opcional: proveedor, ruta decodificada, reloj, `libraryId` y `missing`; `matchByMetadata` compatible |
+| Página de biblioteca | Una llamada a `useWebDAVLibrary`; sin diálogo de catálogo ni callbacks en cabecera/menú |
+| Biblioteca/store y Bookshelf | Filtrar `isWebDAVBookMissing` para ocultar fuentes ausentes sin tombstones ni borrar configs |
+| Explorador WebDAV | Montar `WebDAVRemoteBookAction` como adaptador de operaciones explícitas |
+| Cliente WebDAV | Rutas decodificadas, entidades XML antes de URL, ETag en PROPFIND y rechazo de XML inválido |
+| Resolución/importación de contenido | Usar `bookSource.ts`; no copiar el EPUB a Books ni unir versiones por metadatos |
+| Sync/merge | Mantener fuentes sin binario y su reloj independiente; solo WebDAV sincroniza sus referencias/sidecars |
+| Sync manual/automático y Readest Cloud | Conservar `filterBooksForBackend`, `canSyncBookWithBackend` e `isWebDAVRemoteBook` |
+| Cierre del lector | Invalidar datos antes de cerrar el archivo antiguo; `cache.ts` libera y poda después del cierre |
+| Acciones/detalles | Excluir transferencias de binarios incompatibles para libros enlazados |
 
-Durante un rebase, conservar las mejoras de upstream y volver a aplicar estas
-adaptaciones sobre sus puntos equivalentes. No sustituir archivos originales
-completos con la versión del fork. Si upstream añade un nuevo canal de sync o
-cambia la importación/cierre del lector, revisar expresamente los casos anteriores.
+`remoteBook.ts` sigue siendo puro y solo importa tipos. Las entradas con runtime
+permitidas desde upstream son `bookSource`, `useWebDAVLibrary` y
+`WebDAVRemoteBookAction`; las pruebas de boundaries comprueban sus consumidores.
+La extensión no importa rutas ni las implementaciones de bookService o sync.
+Resolver conflictos sobre los puntos equivalentes nuevos de upstream; no sustituir
+archivos completos. Si cambian el importador, la identidad por hash, el cierre de
+archivos o aparece otro canal de sync, revisar esos contratos expresamente.
 
-## Invariantes funcionales
+## Invariantes
 
-1. Los EPUB originales permanecen en `Libros/`; `Readest/` contiene referencias y
-   sidecars. Nunca subir un EPUB enlazado como parte de Full Sync.
-2. Las referencias no contienen URL con credenciales ni datos de autenticación.
-3. Solo WebDAV sincroniza estas referencias y sus sidecars, también en sync manual.
-4. Una fila antigua sin referencia no borra una referencia existente.
-5. El cierre antiguo no puede borrar los datos de una reapertura posterior.
-6. Registrar un libro no reemplaza la biblioteca por una instantánea antigua.
-7. Listar el catálogo no importa ni descarga el contenido de todos los EPUB.
+1. La raíz montada, con cualquier nombre, es la fuente de verdad para los EPUB y
+   sus grupos. Solo su `Readest/` inmediato se excluye del recorrido.
+2. Escanear/leer no mueve, modifica, sube ni borra los EPUB originales.
+3. Los datos sincronizados de la app permanecen en `Readest/`; la caché completa
+   de cinco EPUB es local, fuera de Books y de los canales de sync.
+4. Un escaneo incompleto no declara ausentes los libros que no pudo comprobar.
+5. Las fuentes ausentes/reemplazadas conservan configs, progreso y anotaciones,
+   sin autorización para borrar archivos del proveedor.
+6. El registro combina con el estado vivo y una cancelación no publica el resultado
+   de una importación ya obsoleta. Los grupos se estampan con su reloj de upstream.
+7. Las referencias no incluyen credenciales. Las claves de índice/caché se separan
+   por montaje; referencias antiguas sin `libraryId` se adoptan en el montaje actual.
+8. Solo se publica una descarga verificada. La poda nunca borra un archivo abierto.
+9. Una fila de un cliente antiguo sin referencia no elimina una referencia nueva.
 
-## Comprobación después de un rebase
+## Comprobación y recuperación
 
-Desde `apps/readest-app`:
+Ejecutar las pruebas y lint indicados en README. Tras un rebase comprobar también
+un montaje de nombre arbitrario con EPUB en la raíz, subcarpetas y caracteres
+`&`, `%`, Unicode; un servidor con y sin Range; reapertura sin red tras reiniciar
+la app; movimientos, reemplazos, fallo parcial y sincronización entre dispositivos.
+Las pruebas simuladas no sustituyen esta comprobación nativa.
 
-```text
-pnpm lint
-pnpm test --run src/__tests__/services/webdav-library src/__tests__/components/webdav src/__tests__/services/sync/file src/__tests__/services/book-content-source.test.ts src/__tests__/services/webdav-list-directory.test.ts src/__tests__/store/reader-store.test.ts src/__tests__/components/settings/fileSyncFormSyncNow.test.tsx src/__tests__/app/library src/__tests__/app/reader/hooks/useFileSync-pullJump.test.ts src/__tests__/hooks/useFileSync.test.ts src/__tests__/hooks/useProgressSync.test.tsx src/__tests__/app/reader/hooks/useNotesSync
-pnpm test:browser src/__tests__/components/webdav-library-dialog.browser.test.tsx
-pnpm test --run
-```
-
-Comparar los fallos generales con la base previa; los fallos existentes del entorno
-no sustituyen las pruebas específicas. Comprobar además un servidor real con y sin
-HTTP Range, dos dispositivos y apertura/cierre rápido en las plataformas nativas.
-No se garantiza un rebase sin conflictos: los cambios de contratos upstream pueden
-requerir adaptar estos puntos, pero la lógica de la extensión permanece separada.
+Para volver a la implementación anterior, revertir el commit de esta extensión y
+reconstruir la app conservando su almacenamiento. Campos nuevos son opcionales y
+la lógica anterior ignora `libraryId`/`missing`; por eso las filas conservadas pueden
+volver a aparecer y la caché nueva deja de usarse. Reaplicar el commit restaura el
+filtrado. No borrar `Books/<hash>/` ni `Readest/` para hacer rollback. El escaneo
+nuevo recupera rutas antiguas mal decodificadas cuando encuentra el mismo contenido.

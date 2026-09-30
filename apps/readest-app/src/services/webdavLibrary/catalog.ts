@@ -1,3 +1,4 @@
+import { getWebDAVRoot } from './identity';
 import type { WebDAVSettings } from '@/types/settings';
 import { listDirectory, type WebDAVEntry } from '@/services/sync/providers/webdav/client';
 
@@ -11,8 +12,9 @@ export async function scanWebDAVLibrary(
   settings: WebDAVSettings,
   signal?: AbortSignal,
 ): Promise<WebDAVCatalog> {
-  const root = `/${settings.rootPath.split('/').filter(Boolean).join('/')}`;
-  const libraryRoot = `${root === '/' ? '' : root}/Libros`;
+  const libraryRoot = getWebDAVRoot(settings);
+  const prefix = libraryRoot === '/' ? '/' : `${libraryRoot}/`;
+  const syncRoot = `${libraryRoot === '/' ? '' : libraryRoot}/Readest`;
   const pending = [libraryRoot];
   const visited = new Set<string>(pending);
   const books = new Map<string, WebDAVEntry>();
@@ -34,7 +36,9 @@ export async function scanWebDAVLibrary(
       for (const entry of result.value) {
         const path = entry.path.replace(/\/+$/, '');
         if (
-          !path.startsWith(`${libraryRoot}/`) ||
+          !path.startsWith(prefix) ||
+          path === syncRoot ||
+          path.startsWith(`${syncRoot}/`) ||
           path
             .split('/')
             .some(

@@ -21,3 +21,7 @@ export const mergeWebDAVSource = (local: Book, remote: Book): Book['remoteSource
   if (!remoteSource) return localSource;
   return (remoteSource.updatedAt ?? 0) > (localSource.updatedAt ?? 0) ? remoteSource : localSource;
 };
+
+/** Missing sources stay in the index to preserve their notes, but leave the shelf. */
+export const isWebDAVBookMissing = (book: Book): boolean =>
+  isWebDAVRemoteBook(book) && book.remoteSource.missing === true;
