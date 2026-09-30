@@ -42,11 +42,11 @@ jobs:
         with:
           targets: aarch64-apple-ios
 
-      - name: Initialize Tauri iOS project
-        run: pnpm tauri ios init --ci --skip-targets-install
-
       - name: Generate production app icons
         run: pnpm tauri icon ../../data/icons/readest-book.png --ios-color '#fff'
+
+      - name: Initialize Tauri iOS project
+        run: pnpm tauri ios init --ci --skip-targets-install
 
       - name: Seed the generated iOS Info.plist
         run: cp apps/readest-app/src-tauri/Info-ios.plist apps/readest-app/src-tauri/gen/apple/Readest_iOS/Info.plist
