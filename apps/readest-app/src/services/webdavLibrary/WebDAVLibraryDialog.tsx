@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Virtuoso } from 'react-virtuoso';
-import { MdArrowBack, MdFolder, MdMenuBook, MdRefresh, MdSearch } from 'react-icons/md';
+import { MdMenuBook, MdRefresh, MdSearch } from 'react-icons/md';
 import Dialog from '@/components/Dialog';
 import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -11,7 +11,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 import type { Book } from '@/types/book';
 import type { WebDAVEntry } from '@/services/sync/providers/webdav/client';
 import { addWebDAVBook } from './bookSource';
-import { listWebDAVLibraryFolder, webDAVLibraryRoot, type WebDAVCatalog } from './catalog';
+import { scanWebDAVLibrary, type WebDAVCatalog } from './catalog';
 import { isWebDAVRemoteBook } from './remoteBook';
 
 interface Props {
@@ -34,19 +34,6 @@ export function WebDAVLibraryDialog({ onClose, onOpenBook }: Props) {
   const mounted = useRef(true);
   const openingRef = useRef(false);
   const configured = !!settings?.serverUrl && !!settings.username;
-  const root = settings ? webDAVLibraryRoot(settings) : '/';
-  const [folder, setFolder] = useState(root);
-
-  useEffect(() => {
-    setFolder(root);
-    setQuery('');
-  }, [root, settings?.serverUrl, settings?.username]);
-
-  const navigateFolder = (path: string) => {
-    setCatalog(null);
-    setQuery('');
-    setFolder(path);
-  };
 
   useEffect(() => {
     mounted.current = true;
@@ -64,7 +51,7 @@ export function WebDAVLibraryDialog({ onClose, onOpenBook }: Props) {
       return () => controller.abort();
     }
     setLoading(true);
-    void listWebDAVLibraryFolder(settings, folder, controller.signal)
+    void scanWebDAVLibrary(settings, controller.signal)
       .then((result) => {
         if (!controller.signal.aborted) setCatalog(result);
       })
@@ -81,7 +68,6 @@ export function WebDAVLibraryDialog({ onClose, onOpenBook }: Props) {
     settings?.username,
     settings?.password,
     settings?.rootPath,
-    folder,
     revision,
   ]);
 
@@ -147,19 +133,9 @@ export function WebDAVLibraryDialog({ onClose, onOpenBook }: Props) {
           <p>{_('Configure WebDAV in Settings → Integrations to browse your library.')}</p>
         ) : (
           <>
-            <p className='text-sm'>{_('Browse folders and select an EPUB book to read it.')}</p>
-            <div className='flex items-center gap-2'>
-              <button
-                type='button'
-                className='btn btn-ghost btn-circle eink-bordered touch-target'
-                aria-label={_('Back')}
-                disabled={folder === root || !!opening}
-                onClick={() => navigateFolder(folder.slice(0, folder.lastIndexOf('/')) || '/')}
-              >
-                <MdArrowBack aria-hidden className='h-6 w-6' />
-              </button>
-              <p className='min-w-0 break-all text-sm'>{folder}</p>
-            </div>
+            <p className='text-sm'>
+              {_('All EPUB books in Libros and its subfolders. Select a book to read it.')}
+            </p>
             <div className='flex items-center gap-2'>
               <label className='input eink-bordered flex flex-1 items-center gap-2'>
                 <MdSearch aria-hidden className='h-5 w-5' />
@@ -190,9 +166,14 @@ export function WebDAVLibraryDialog({ onClose, onOpenBook }: Props) {
                 {catalog
                   ? _('Unable to open this WebDAV book. Check your connection and try again.')
                   : _(
-                      'Unable to load this WebDAV folder. Check your connection and configured folder, then refresh.',
+                      'Unable to load the WebDAV library. Check your connection and the Libros folder, then refresh.',
                     )}
               </div>
+            )}
+            {!!catalog?.failedDirectories.length && (
+              <p role='alert' className='text-sm'>
+                {_('Some folders could not be read. Refresh to retry; this list is incomplete.')}
+              </p>
             )}
             {loading ? (
               <p role='status'>{_('Loading WebDAV library…')}</p>
@@ -200,44 +181,29 @@ export function WebDAVLibraryDialog({ onClose, onOpenBook }: Props) {
               <>
                 {catalog && (
                   <p role='status' className='text-sm'>
-                    {_('{{count}} book(s)', {
-                      count: entries.filter((entry) => !entry.isDirectory).length,
-                    })}
+                    {_('{{count}} book(s)', { count: entries.length })}
                   </p>
                 )}
                 {catalog && !entries.length && (
-                  <p>{query ? _('No books found') : _('No EPUB books or folders found here.')}</p>
+                  <p>{query ? _('No books found') : _('No EPUB books found in Libros.')}</p>
                 )}
                 {!!entries.length && (
                   <Virtuoso
-                    key={folder}
                     style={{ flex: 1, minHeight: 0 }}
                     data={entries}
                     computeItemKey={(_index, entry) => entry.path}
                     itemContent={(_index, entry) => {
                       const book = booksByPath.get(entry.path);
-                      const title = entry.isDirectory
-                        ? entry.name
-                        : book?.title || entry.name.replace(/\.epub$/i, '');
+                      const title = book?.title || entry.name.replace(/\.epub$/i, '');
                       return (
                         <button
                           type='button'
                           disabled={!!opening}
-                          onClick={() =>
-                            entry.isDirectory ? navigateFolder(entry.path) : void openBook(entry)
-                          }
-                          aria-label={
-                            entry.isDirectory
-                              ? _('Open folder {{title}}', { title })
-                              : _('Open {{title}}', { title })
-                          }
+                          onClick={() => void openBook(entry)}
+                          aria-label={_('Open {{title}}', { title })}
                           className='eink-bordered border-base-200 hover:bg-base-200 focus-visible:ring-base-content/15 flex min-h-16 w-full items-center gap-3 border-b px-3 py-3 text-start transition-colors focus-visible:ring-2'
                         >
-                          {entry.isDirectory ? (
-                            <MdFolder aria-hidden className='h-7 w-7 shrink-0' />
-                          ) : (
-                            <MdMenuBook aria-hidden className='h-7 w-7 shrink-0' />
-                          )}
+                          <MdMenuBook aria-hidden className='h-7 w-7 shrink-0' />
                           <span className='min-w-0 flex-1'>
                             <span className='block truncate font-medium'>{title}</span>
                             <span className='block truncate text-sm'>
@@ -245,11 +211,7 @@ export function WebDAVLibraryDialog({ onClose, onOpenBook }: Props) {
                             </span>
                           </span>
                           <span className='shrink-0 text-sm'>
-                            {entry.isDirectory
-                              ? _('Open')
-                              : opening === entry.path
-                                ? _('Opening…')
-                                : _('Read')}
+                            {opening === entry.path ? _('Opening…') : _('Read')}
                           </span>
                         </button>
                       );

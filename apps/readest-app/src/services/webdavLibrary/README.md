@@ -2,12 +2,11 @@
 
 ## User flow
 
-Configure the existing WebDAV integration with the library URL and root folder.
-The URL may already point to the books folder; no directory name is assumed or
-appended. Open **Main menu → WebDAV Library** once configured (the + action also
-remains available). Browse folders and subfolders, or search entries in the current
-folder. Select an EPUB to read it directly. Refresh reloads the current folder.
-The reserved `<root>/Readest` sidecar directory is excluded.
+Configure the existing WebDAV integration with a server URL and a root containing
+the sibling directories `Libros/` and `Readest/`. Open **+ → WebDAV Library** in
+the library header or the shelf's add tile. The catalog lists all EPUB files in
+`Libros/`, including nested folders. Search matches filenames, paths and metadata
+already known to Readest. Refresh rescans the server.
 
 Listing uses PROPFIND only. Selecting a new book imports metadata, a cover and
 configuration, then opens the reader. It does not persist the EPUB in Books or
@@ -24,13 +23,12 @@ The feature supports the existing single WebDAV account configuration in Tauri
 
 ## Isolation and rebase seams
 
-- `catalog.ts`: one metadata request per visited folder, configured-root validation,
-  direct-child filtering, deduplication and cancellation checks. No global state or
-  reader imports. Failed folders display an error with retry and parent navigation.
-- `WebDAVLibraryDialog.tsx`: folder navigation, search, virtualized rows, and lazy
-  book registration. Reader navigation comes from the existing library page callback.
-- `WebDAVLibraryMenuItem.tsx`: configured-account visibility and permanent menu
-  action. The original SettingsMenu mounts this adapter and forwards the callback.
+- `catalog.ts`: recursive discovery, four concurrent directory requests maximum,
+  deduplication, cancellation between requests, exclusion of paths outside Libros.
+  A failed root scan fails visibly; unreadable subfolders produce an incomplete
+  catalog warning. No global state or reader imports.
+- `WebDAVLibraryDialog.tsx`: catalog UI, filtering, virtualized rows, and lazy book
+  registration. Navigation is supplied by the existing library page callback.
 - `bookSource.ts`: authenticated content access, range validation, temporary native
   fallback, content identity and metadata-only registration. Credentials are read
   from existing settings and never embedded in the source reference or index.
@@ -64,7 +62,7 @@ checks. Boundary tests keep transport/UI entrypoints restricted to their adapter
 
 ## Verification
 
-Regression tests cover folder navigation, unreadable folders, cancellation,
+Regression tests cover catalog traversal, unreadable folders, cancellation,
 path encoding, range authentication, truncated ranges, fallback cleanup,
 temporary-name limits, concurrent library changes, source-only sync discovery,
 manual provider isolation, rapid reader reopening and the catalog read flow.
