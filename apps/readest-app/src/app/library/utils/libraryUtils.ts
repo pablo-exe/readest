@@ -1,4 +1,4 @@
-import { isWebDAVRemoteBook } from '@/services/webdavLibrary/remoteBook';
+import { isWebDAVBookMissing, isWebDAVRemoteBook } from '@/services/webdavLibrary/remoteBook';
 import { Book, BooksGroup, ReadingStatus } from '@/types/book';
 import {
   LibraryGroupByType,
@@ -214,9 +214,9 @@ export const getBookSubjects = (book: Book): string[] => {
 export const getBookTags = (book: Book): string[] => normalizeValues(book.tags ?? []);
 
 export const getLibraryTags = (books: Book[]): string[] =>
-  normalizeValues(books.filter((book) => !book.deletedAt).flatMap(getBookTags)).sort((a, b) =>
-    a.localeCompare(b),
-  );
+  normalizeValues(
+    books.filter((book) => !book.deletedAt && !isWebDAVBookMissing(book)).flatMap(getBookTags),
+  ).sort((a, b) => a.localeCompare(b));
 
 export type TagSelectionState = 'all' | 'some' | 'none';
 
@@ -253,6 +253,7 @@ const getBookValuesText = (book: Book): string =>
   [...getBookTags(book), ...getBookSubjects(book)].join(' ');
 
 export const createBookFilter = (queryTerm: string | null) => (item: Book) => {
+  if (isWebDAVBookMissing(item)) return false;
   if (!queryTerm) return true;
   if (item.deletedAt) return false;
   let searchTerm: RegExp;
@@ -547,7 +548,7 @@ export const createBookGroups = (
   groupBy: LibraryGroupByType,
 ): (Book | BooksGroup)[] => {
   // Filter out deleted books
-  const activeBooks = books.filter((book) => !book.deletedAt);
+  const activeBooks = books.filter((book) => !book.deletedAt && !isWebDAVBookMissing(book));
 
   if (groupBy === LibraryGroupByType.None) {
     return activeBooks;
@@ -721,7 +722,7 @@ export const resolveCurrentShelfBooks = (
   groupId = '',
   manualGroupName?: string,
 ): Book[] => {
-  const activeBooks = books.filter((book) => !book.deletedAt);
+  const activeBooks = books.filter((book) => !book.deletedAt && !isWebDAVBookMissing(book));
   if (!groupId) return activeBooks;
   if (groupBy === LibraryGroupByType.None) return [];
   if (groupBy === LibraryGroupByType.Group) {

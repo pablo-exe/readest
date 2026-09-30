@@ -9,8 +9,10 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { buildBasicAuthHeader } from '@/services/sync/providers/webdav/client';
 import { RemoteFile } from '@/utils/file';
 import { tauriDownload } from '@/utils/transfer';
-import { partialMD5 } from '@/utils/md5';
+import { md5Fingerprint, partialMD5 } from '@/utils/md5';
 import { isWebDAVRemoteBook } from './remoteBook';
+import { getWebDAVLibraryId, getWebDAVRoot } from './identity';
+import { openCachedWebDAVBook } from './cache';
 
 const CACHE_PREFIX = 'webdav-remote-';
 
@@ -68,7 +70,11 @@ export const getWebDAVBookRequest = (
 ): { path: string; url: string; fetcher: typeof fetch } | null => {
   if (!isWebDAVRemoteBook(book)) return null;
   const settings = currentWebDAVSettings();
-  if (!settings) return null;
+  if (
+    !settings ||
+    (book.remoteSource.libraryId && book.remoteSource.libraryId !== getWebDAVLibraryId(settings))
+  )
+    return null;
   try {
     const path = validateWebDAVPath(book.remoteSource.path, settings.rootPath || '/');
     return {
@@ -252,9 +258,26 @@ export const openWebDAVBookFile = async (fs: FileSystem, book: Book): Promise<Fi
   if (!settings) throw new Error('Connect to WebDAV to open this book.');
   const sourcePath = validateWebDAVPath(book.remoteSource.path, settings.rootPath || '/');
   const filename = sourcePath.split('/').pop() || `${book.hash}.epub`;
+  if (book.remoteSource.libraryId && book.remoteSource.libraryId !== getWebDAVLibraryId(settings)) {
+    throw new Error('This book belongs to another WebDAV library.');
+  }
+  if (isTauriAppPlatform()) {
+    return openCachedWebDAVBook(fs, book, settings, async (absolutePath) => {
+      const headers = await tauriDownload(
+        buildWebDAVBookUrl(settings, sourcePath),
+        absolutePath,
+        undefined,
+        { Authorization: buildBasicAuthHeader(settings.username, settings.password) },
+        undefined,
+        true,
+      );
+      const size = headers?.['content-length'] ?? headers?.['Content-Length'];
+      return size && /^\d+$/.test(size) ? Number(size) : undefined;
+    });
+  }
   return openWebDAVSourceFile(
     {
-      resolveCachePath: async (path) => fs.resolvePath(path, 'Cache').fp,
+      resolveCachePath: async (path) => `${await fs.getPrefix('Cache')}/${path}`,
       openFile: (path, base, name) => fs.openFile(path, base, name),
       removeFile: (path, base) => fs.removeFile(path, base),
     },
@@ -287,11 +310,22 @@ export const addWebDAVBook = async (
   settings: WebDAVSettings,
   entry: WebDAVEntry,
   books: Book[],
+  signal?: AbortSignal,
 ): Promise<AddWebDAVBookResult> => {
   if (entry.isDirectory || !/\.epub$/i.test(entry.name)) {
     throw new Error('Only EPUB files can be added as remote books.');
   }
+  signal?.throwIfAborted();
+  const libraryId = getWebDAVLibraryId(settings);
   const sourcePath = validateWebDAVPath(entry.path, settings.rootPath || '/');
+  const root = getWebDAVRoot(settings);
+  const groupName =
+    sourcePath
+      .slice(root === '/' ? 1 : root.length + 1)
+      .split('/')
+      .slice(0, -1)
+      .join('/') || undefined;
+  const groupId = groupName ? md5Fingerprint(groupName) : undefined;
   const remoteFile = await openWebDAVSourceFile(
     {
       resolveCachePath: (path) => appService.resolveFilePath(path, 'Cache'),
@@ -306,29 +340,57 @@ export const addWebDAVBook = async (
     const hash = await partialMD5(remoteFile);
     const state = useLibraryStore.getState();
     const currentBooks = state.libraryLoaded ? state.library : books;
-    const existing = currentBooks.find((book) => book.hash === hash && !book.deletedAt);
+    signal?.throwIfAborted();
+    const existing = currentBooks.find(
+      (book) => book.hash === hash && (!book.deletedAt || isWebDAVRemoteBook(book)),
+    );
     if (existing) {
       if (isWebDAVRemoteBook(existing)) {
-        const changed = existing.remoteSource.path !== sourcePath;
+        const changed =
+          existing.remoteSource.path !== sourcePath ||
+          existing.remoteSource.libraryId !== libraryId ||
+          !!existing.remoteSource.missing ||
+          !!existing.deletedAt ||
+          existing.groupName !== groupName ||
+          existing.groupId !== groupId;
+        let linked = existing;
         if (changed) {
-          const now = Math.max(Date.now(), (existing.remoteSource.updatedAt ?? 0) + 1);
-          existing.remoteSource = { provider: 'webdav', path: sourcePath, updatedAt: now };
-          existing.updatedAt = now;
-          existing.uploadedAt = null;
-          existing.downloadedAt = null;
-          await saveLinkedBook(appService, existing, books);
+          const now = Math.max(
+            Date.now(),
+            (existing.updatedAt ?? 0) + 1,
+            existing.remoteSource.updatedAt + 1,
+            (existing.groupUpdatedAt ?? 0) + 1,
+          );
+          linked = {
+            ...existing,
+            remoteSource: { provider: 'webdav', path: sourcePath, libraryId, updatedAt: now },
+            updatedAt: now,
+            groupName,
+            groupId,
+            groupUpdatedAt: now,
+            deletedAt: null,
+            fileSyncDeletionRequestedAt: null,
+            uploadedAt: null,
+            downloadedAt: null,
+          };
+          signal?.throwIfAborted();
+          await saveLinkedBook(appService, linked, books);
         }
-        return { book: existing, added: false, sourceUpdated: changed };
+        return { book: linked, added: false, sourceUpdated: changed };
       }
       return { book: existing, added: false, sourceUpdated: false };
     }
 
-    const book = await appService.importBook(remoteFile, books, {
+    const book = await appService.importBook(remoteFile, [...currentBooks], {
       saveBook: false,
       matchByMetadata: false,
     });
     if (!book) throw new Error('Import returned no book.');
-    book.remoteSource = { provider: 'webdav', path: sourcePath, updatedAt: Date.now() };
+    signal?.throwIfAborted();
+    book.remoteSource = { provider: 'webdav', path: sourcePath, libraryId, updatedAt: Date.now() };
+    book.groupName = groupName;
+    book.groupId = groupId;
+    book.groupUpdatedAt = book.remoteSource.updatedAt;
     book.filePath = undefined;
     book.url = undefined;
     book.uploadedAt = null;

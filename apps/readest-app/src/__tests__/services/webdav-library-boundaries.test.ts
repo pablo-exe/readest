@@ -6,8 +6,8 @@ const root = join(process.cwd(), 'src');
 const feature = 'services/webdavLibrary/';
 const prefix = '@/services/webdavLibrary/';
 const adapters: Record<string, string[]> = {
+  useWebDAVLibrary: ['app/library/page.tsx'],
   bookSource: ['services/bookContent.ts', 'services/bookService.ts'],
-  WebDAVLibraryDialog: ['app/library/page.tsx'],
   WebDAVRemoteBookAction: ['components/settings/integrations/WebDAVBrowsePane.tsx'],
 };
 

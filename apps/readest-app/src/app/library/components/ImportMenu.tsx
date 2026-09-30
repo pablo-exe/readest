@@ -6,7 +6,6 @@ import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import MenuItem from '@/components/MenuItem';
 import Menu from '@/components/Menu';
-import { isTauriAppPlatform } from '@/services/environment';
 
 export interface ImportMenuProps {
   menuClassName?: string;
@@ -16,7 +15,6 @@ export interface ImportMenuProps {
   onImportFromWebBrowser?: () => void;
   onImportBookFromNovelUrl?: () => void;
   onOpenCatalogManager: () => void;
-  onOpenWebDAVLibrary?: () => void;
   onOpenFeeds: () => void;
 }
 
@@ -28,7 +26,6 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
   onImportFromWebBrowser,
   onImportBookFromNovelUrl,
   onOpenCatalogManager,
-  onOpenWebDAVLibrary,
   onOpenFeeds,
 }) => {
   const _ = useTranslation();
@@ -104,16 +101,6 @@ const ImportMenu: React.FC<ImportMenuProps> = ({
         Icon={<MdRssFeed className='h-5 w-5' />}
         onClick={handleOpenFeeds}
       />
-      {isTauriAppPlatform() && onOpenWebDAVLibrary && (
-        <MenuItem
-          label={_('WebDAV Library')}
-          Icon={<LuLibrary className='h-5 w-5' />}
-          onClick={() => {
-            onOpenWebDAVLibrary();
-            setIsDropdownOpen?.(false);
-          }}
-        />
-      )}
       <MenuItem
         label={appService?.isOnlineCatalogsAccessible ? _('Online Library') : _('OPDS Catalogs')}
         Icon={<LuLibrary className='h-5 w-5' />}

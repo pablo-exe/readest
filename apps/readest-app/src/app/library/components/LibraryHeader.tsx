@@ -32,7 +32,6 @@ interface LibraryHeaderProps {
   onImportFromWebBrowser?: () => void;
   onImportBookFromNovelUrl?: () => void;
   onOpenCatalogManager: () => void;
-  onOpenWebDAVLibrary?: () => void;
   onOpenFeeds: () => void;
   onToggleSelectMode: () => void;
   onSelectAll: () => void;
@@ -54,7 +53,6 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
   onImportFromWebBrowser,
   onImportBookFromNovelUrl,
   onOpenCatalogManager,
-  onOpenWebDAVLibrary,
   onOpenFeeds,
   onToggleSelectMode,
   onSelectAll,
@@ -213,7 +211,6 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
                     onImportFromWebBrowser={onImportFromWebBrowser}
                     onImportBookFromNovelUrl={onImportBookFromNovelUrl}
                     onOpenCatalogManager={onOpenCatalogManager}
-                    onOpenWebDAVLibrary={onOpenWebDAVLibrary}
                     onOpenFeeds={onOpenFeeds}
                   />
                 </Dropdown>

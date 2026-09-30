@@ -28,6 +28,8 @@ export interface WebDAVEntry {
   isDirectory: boolean;
   /** Content length in bytes when reported by the server (files only). */
   size?: number;
+  /** Opaque server content validator, when available. */
+  etag?: string;
   /** Server-provided modification timestamp, if any. */
   lastModified?: string;
   /**
@@ -69,6 +71,7 @@ const PROPFIND_BODY = `<?xml version="1.0" encoding="utf-8" ?>
     <D:displayname/>
     <D:resourcetype/>
     <D:getcontentlength/>
+    <D:getetag/>
     <D:getlastmodified/>
     <D:creationdate/>
   </D:prop>
@@ -204,13 +207,27 @@ const fetchWithTimeout = async (
  * so a tolerant local-name match keeps the parser robust without reaching
  * for a full XML library.
  */
+// XML escaping is independent of URL escaping. Decode exactly once so a
+// literal filename containing "&amp;" is not accidentally rewritten to "&".
+const decodeXmlText = (text: string): string =>
+  text.replace(/&(amp|lt|gt|quot|apos|#\d+|#x[\da-f]+);/gi, (entity, code: string) => {
+    const named: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+    if (named[code]) return named[code]!;
+    if (!code.startsWith('#')) return entity;
+    const value =
+      code[1]?.toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : Number(code.slice(1));
+    return value > 0 && value <= 0x10ffff && !(value >= 0xd800 && value <= 0xdfff)
+      ? String.fromCodePoint(value)
+      : entity;
+  });
+
 const extractTagText = (xml: string, localName: string): string | undefined => {
   const re = new RegExp(
     `<(?:[a-zA-Z0-9]+:)?${localName}[^>]*>([\\s\\S]*?)<\\/(?:[a-zA-Z0-9]+:)?${localName}>`,
     'i',
   );
   const match = re.exec(xml);
-  return match ? match[1]!.trim() : undefined;
+  return match ? decodeXmlText(match[1]!.trim()) : undefined;
 };
 
 /**
@@ -391,6 +408,13 @@ export const listDirectory = async (
     throw new WebDAVRequestError(`PROPFIND failed with status ${response.status}`, response.status);
   }
   const xml = await response.text();
+  const document = new DOMParser().parseFromString(xml, 'application/xml');
+  if (
+    document.documentElement.localName !== 'multistatus' ||
+    document.getElementsByTagName('parsererror').length
+  ) {
+    throw new WebDAVRequestError('Invalid WebDAV directory response.', response.status);
+  }
   let serverOrigin = '';
   try {
     serverOrigin = new URL(config.serverUrl).origin;
@@ -427,6 +451,7 @@ export const listDirectory = async (
       isDirectory: isDir,
       size: sizeStr && !isDir ? Number(sizeStr) : undefined,
       lastModified,
+      etag: extractTagText(block, 'getetag'),
       created,
     });
   }

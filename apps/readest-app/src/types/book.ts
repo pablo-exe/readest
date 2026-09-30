@@ -105,7 +105,11 @@ export interface Book {
     provider: 'webdav';
     /** Decoded path relative to the configured WebDAV server URL. */
     path: string;
-    /** Changes only when the provider path changes. */
+    /** Mount identity; absent on references created by older clients. */
+    libraryId?: string;
+    /** A confirmed absent/replaced source; sidecars and reading state are retained. */
+    missing?: boolean;
+    /** Changes when the source reference or its availability changes. */
     updatedAt: number;
   };
   // if Book is a transient local book we can load the book content via filePath

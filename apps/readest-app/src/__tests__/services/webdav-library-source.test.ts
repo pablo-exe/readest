@@ -1,13 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { AppService, FileSystem } from '@/types/system';
-import { useSettingsStore } from '@/store/settingsStore';
+import type { AppService } from '@/types/system';
 import type { Book } from '@/types/book';
 import { useLibraryStore } from '@/store/libraryStore';
 import {
   addWebDAVBook,
   buildWebDAVBookUrl,
   createWebDAVBookFetcher,
-  openWebDAVBookFile,
 } from '@/services/webdavLibrary/bookSource';
 
 const fetchMock = vi.hoisted(() => vi.fn());
@@ -49,31 +47,50 @@ describe('WebDAV remote source', () => {
     ).rejects.toThrow('valid byte ranges');
   });
 
-  test('temporary fallback filenames fit the filesystem limit and are unique per open', async () => {
-    useSettingsStore.setState((state) => ({ settings: { ...state.settings, webdav: settings } }));
+  test('metadata fallback filenames fit the filesystem limit and are unique per import', async () => {
     fetchMock.mockResolvedValue(new Response('no range', { status: 200 }));
-    const book = {
-      hash: 'a'.repeat(32),
-      remoteSource: {
-        provider: 'webdav',
-        path: `/books/Libros/${'a'.repeat(240)}.epub`,
-        updatedAt: 1,
-      },
-    } as Book;
     const paths: string[] = [];
-    const fs = {
-      resolvePath: (path: string) => {
+    const app = {
+      resolveFilePath: async (path: string) => {
         paths.push(path);
-        return { fp: path };
+        return path;
       },
       openFile: async () => new File([], 'temp.epub'),
-      removeFile: async () => {},
-    } as unknown as FileSystem;
-    await openWebDAVBookFile(fs, book);
-    await openWebDAVBookFile(fs, book);
+      deleteFile: async () => {},
+      importBook: async () => ({ hash: 'a'.repeat(32), format: 'EPUB' }) as Book,
+      saveLibraryBooks: async () => {},
+    } as unknown as AppService;
+    const entry = {
+      ...source,
+      name: `${'a'.repeat(240)}.epub`,
+      path: `/books/${'a'.repeat(240)}.epub`,
+    };
+    await addWebDAVBook(app, settings, entry, []);
+    await addWebDAVBook(app, settings, entry, []);
     expect(paths[0]).not.toEqual(paths[1]);
     expect(paths.every((path) => path.length <= 255)).toBe(true);
   });
+  test('cancellation after metadata extraction never publishes a stale mount reference', async () => {
+    fetchMock.mockResolvedValue(new Response('no range', { status: 200 }));
+    const controller = new AbortController();
+    const saveLibraryBooks = vi.fn(async () => {});
+    const app = {
+      resolveFilePath: async (path: string) => path,
+      openFile: async () => new File([], 'temp.epub'),
+      deleteFile: async () => {},
+      importBook: async () => {
+        controller.abort();
+        return { hash: 'a'.repeat(32), format: 'EPUB' } as Book;
+      },
+      saveLibraryBooks,
+    } as unknown as AppService;
+    await expect(addWebDAVBook(app, settings, source, [], controller.signal)).rejects.toMatchObject(
+      { name: 'AbortError' },
+    );
+    expect(saveLibraryBooks).not.toHaveBeenCalled();
+    expect(useLibraryStore.getState().library).toEqual([]);
+  });
+
   test('escapes decoded filenames and rejects sidecars and traversal', () => {
     expect(buildWebDAVBookUrl(settings, '/books/Libros/100%20 real.epub')).toBe(
       'https://example.test/dav/books/Libros/100%2520%20real.epub',

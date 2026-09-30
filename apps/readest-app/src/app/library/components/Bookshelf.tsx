@@ -1,3 +1,4 @@
+import { isWebDAVBookMissing } from '@/services/webdavLibrary/remoteBook';
 import LibraryEmptyState from './LibraryEmptyState';
 import LibraryImportButton from './LibraryImportButton';
 import clsx from 'clsx';
@@ -249,7 +250,10 @@ const Bookshelf: React.FC<BookshelfProps> = ({
   // re-filtering and re-sorting every shelf.
   const absServers = useABSServerStore((state) => state.servers);
   const visibleBooks = useMemo(
-    () => libraryBooks.filter((book) => !book.deletedAt && !isAbsBookOrphaned(book)),
+    () =>
+      libraryBooks.filter(
+        (book) => !book.deletedAt && !isAbsBookOrphaned(book) && !isWebDAVBookMissing(book),
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [libraryBooks, absServers, settings.absServers],
   );

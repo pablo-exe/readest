@@ -43,11 +43,36 @@ afterEach(() => {
 });
 
 describe('listDirectory metadata parsing', () => {
+  test('decodes XML entities before URL escapes, without decoding a literal entity twice', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        multistatus(`
+      <D:response><D:href>/books/Historia &amp; ciencia &#x26; arte.epub</D:href>
+      <D:propstat><D:prop><D:resourcetype/><D:getetag>&quot;v1&quot;</D:getetag></D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>
+      <D:response><D:href>/books/Literal%20&amp;amp;.epub</D:href></D:response>
+    `),
+        { status: 207 },
+      ),
+    );
+    const entries = await listDirectory(config, '/books');
+    expect(entries[0]?.path).toBe('/books/Historia & ciencia & arte.epub');
+    expect(entries[0]?.etag).toBe('"v1"');
+    expect(entries[1]?.path).toBe('/books/Literal &amp;.epub');
+  });
+
   test('following decoded entries preserves literal percent escapes and filename whitespace', async () => {
     fetchMock.mockResolvedValueOnce(new Response(multistatus(''), { status: 207 }));
     await listDirectory(config, '/books/100%20 real ', true);
     expect(fetchMock.mock.calls[0]?.[0]).toBe('https://dav.example.com/books/100%2520%20real%20');
   });
+  test('rejects malformed or non-WebDAV responses instead of reporting an empty catalog', async () => {
+    for (const xml of ['<html>Login</html>', '<D:multistatus xmlns:D="DAV:"><D:response>']) {
+      fetchMock.mockResolvedValueOnce(new Response(xml, { status: 207 }));
+      await expect(listDirectory(config, '/books')).rejects.toThrow('Invalid WebDAV');
+    }
+  });
+
   test('requests creationdate in the PROPFIND body', async () => {
     fetchMock.mockResolvedValueOnce(new Response(multistatus(''), { status: 207 }));
     await listDirectory(config, '/books');
