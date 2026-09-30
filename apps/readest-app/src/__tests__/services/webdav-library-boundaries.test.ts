@@ -7,6 +7,8 @@ const feature = 'services/webdavLibrary/';
 const prefix = '@/services/webdavLibrary/';
 const adapters: Record<string, string[]> = {
   useWebDAVLibrary: ['app/library/page.tsx'],
+  WebDAVSyncProgress: ['app/library/components/LibraryHeader.tsx'],
+  syncProgress: ['app/library/hooks/useLibraryFileSync.ts', 'services/sync/file/runLibrarySync.ts'],
   bookSource: ['services/bookContent.ts', 'services/bookService.ts'],
   WebDAVRemoteBookAction: ['components/settings/integrations/WebDAVBrowsePane.tsx'],
 };

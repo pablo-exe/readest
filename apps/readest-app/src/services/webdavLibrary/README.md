@@ -114,3 +114,19 @@ checkout; after `pnpm setup-vendors`, all 51 tests in those files passed. Remain
 baseline failures concern generated ZIP/Blob fixtures in documents, dictionaries
 and novel conversion. The full suite is therefore not claimed entirely green.
 No native IPA/APK build, device install or production deployment was performed.
+
+## Search-box sync indicator
+
+`WebDAVSyncProgress` renders a two-pixel line below the library search input,
+without visible text. `syncProgress.ts` tracks discovery and the existing
+library sync pass in memory only. Folder/book and transfer counters drive
+approximate, monotonic progress; 100% requires both stages to succeed, including
+the shared index write. Failed/aborted work never displays completion. The full
+line remains briefly visible and then disappears. Reduced-motion and e-ink
+modes disable transitions.
+
+Discovery requests a debounced library sync even when it finds no changes.
+Pending requests invalidate earlier runs and retry after the existing global
+sync mutex is released, so a pass racing discovery cannot certify completion.
+The search indicator covers enabled library synchronization, not reader-only
+per-book uploads or five-book cache downloads.

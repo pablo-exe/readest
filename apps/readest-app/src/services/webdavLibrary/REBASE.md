@@ -9,6 +9,7 @@ los grupos, el lector y el motor de sincronización de upstream.
 | --- | --- |
 | `types/book.ts` | `remoteSource` opcional: proveedor, ruta decodificada, reloj, `libraryId` y `missing`; `matchByMetadata` compatible |
 | Página de biblioteca | Una llamada a `useWebDAVLibrary`; sin diálogo de catálogo ni callbacks en cabecera/menú |
+| Cabecera y sincronización de biblioteca | `WebDAVSyncProgress` bajo el buscador; `syncProgress` observa el ciclo de WebDAV y el hook solicita un pase al terminar el escaneo |
 | Biblioteca/store y Bookshelf | Filtrar `isWebDAVBookMissing` para ocultar fuentes ausentes sin tombstones ni borrar configs |
 | Explorador WebDAV | Montar `WebDAVRemoteBookAction` como adaptador de operaciones explícitas |
 | Cliente WebDAV | Rutas decodificadas, entidades XML antes de URL, ETag en PROPFIND y rechazo de XML inválido |
@@ -20,7 +21,7 @@ los grupos, el lector y el motor de sincronización de upstream.
 
 `remoteBook.ts` sigue siendo puro y solo importa tipos. Las entradas con runtime
 permitidas desde upstream son `bookSource`, `useWebDAVLibrary` y
-`WebDAVRemoteBookAction`; las pruebas de boundaries comprueban sus consumidores.
+`WebDAVRemoteBookAction`, `WebDAVSyncProgress` y `syncProgress`; las pruebas de boundaries comprueban sus consumidores.
 La extensión no importa rutas ni las implementaciones de bookService o sync.
 Resolver conflictos sobre los puntos equivalentes nuevos de upstream; no sustituir
 archivos completos. Si cambian el importador, la identidad por hash, el cierre de

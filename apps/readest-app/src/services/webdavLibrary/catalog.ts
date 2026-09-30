@@ -11,6 +11,7 @@ export interface WebDAVCatalog {
 export async function scanWebDAVLibrary(
   settings: WebDAVSettings,
   signal?: AbortSignal,
+  onProgress?: (progress: number) => void,
 ): Promise<WebDAVCatalog> {
   const libraryRoot = getWebDAVRoot(settings);
   const prefix = libraryRoot === '/' ? '/' : `${libraryRoot}/`;
@@ -19,6 +20,7 @@ export async function scanWebDAVLibrary(
   const visited = new Set<string>(pending);
   const books = new Map<string, WebDAVEntry>();
   const failedDirectories: string[] = [];
+  let completed = 0;
   while (pending.length) {
     signal?.throwIfAborted();
     const batch = pending.splice(0, 4);
@@ -56,6 +58,8 @@ export async function scanWebDAVLibrary(
         }
       }
     }
+    completed += batch.length;
+    onProgress?.(completed / visited.size);
   }
   return {
     entries: [...books.values()].sort((a, b) =>
