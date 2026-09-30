@@ -41,19 +41,13 @@ import MenuItem from '@/components/MenuItem';
 import Quota from '@/components/Quota';
 import Menu from '@/components/Menu';
 import { type AppLockDialogMode, useAppLockStore } from '@/store/appLockStore';
-import { WebDAVLibraryMenuItem } from '@/services/webdavLibrary/WebDAVLibraryMenuItem';
 
 interface SettingsMenuProps {
   onPullLibrary: (fullRefresh?: boolean, verbose?: boolean) => void;
   setIsDropdownOpen?: (isOpen: boolean) => void;
-  onOpenWebDAVLibrary?: () => void;
 }
 
-const SettingsMenu: React.FC<SettingsMenuProps> = ({
-  onPullLibrary,
-  setIsDropdownOpen,
-  onOpenWebDAVLibrary,
-}) => {
+const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdownOpen }) => {
   const _ = useTranslation();
   const router = useAppRouter();
   const { envConfig, appService } = useEnv();
@@ -303,7 +297,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({
       )}
       onCancel={() => setIsDropdownOpen?.(false)}
     >
-      <WebDAVLibraryMenuItem onOpen={onOpenWebDAVLibrary} onCloseMenu={setIsDropdownOpen} />
       {user ? (
         <MenuItem
           label={

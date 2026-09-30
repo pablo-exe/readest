@@ -18,17 +18,14 @@ vi.mock('@/store/deviceStore', () => ({
   }),
 }));
 vi.mock('@/services/webdavLibrary/bookSource', () => ({ addWebDAVBook: mocks.add }));
-vi.mock('@/services/webdavLibrary/catalog', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/services/webdavLibrary/catalog')>()),
-  listWebDAVLibraryFolder: async (_settings: unknown, path: string) => ({
-    entries:
-      path === '/'
-        ? [{ name: 'Authors', path: '/Authors', isDirectory: true }]
-        : Array.from({ length: 1000 }, (_, index) => ({
-            name: `Book ${index}.epub`,
-            path: `/Authors/Book ${index}.epub`,
-            isDirectory: false,
-          })),
+vi.mock('@/services/webdavLibrary/catalog', () => ({
+  scanWebDAVLibrary: async () => ({
+    entries: Array.from({ length: 1000 }, (_, index) => ({
+      name: `Book ${index}.epub`,
+      path: `/Libros/Book ${index}.epub`,
+      isDirectory: false,
+    })),
+    failedDirectories: [],
   }),
 }));
 
@@ -65,7 +62,6 @@ for (const [name, width, height, eink] of [
     const book = { hash: 'book999', title: 'Book 999' } as Book;
     mocks.add.mockResolvedValue({ book });
     render(<WebDAVLibraryDialog onClose={vi.fn()} onOpenBook={onOpenBook} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Open folder Authors' }));
     const first = await screen.findByRole('button', { name: 'Open Book 0' });
     await waitFor(() => expect(first.getBoundingClientRect().height).toBeGreaterThan(40));
     const rect = first.getBoundingClientRect();
