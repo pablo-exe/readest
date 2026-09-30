@@ -47,18 +47,26 @@ export function reconcileWebDAVLibrary(
   app: AppService,
   settings: WebDAVSettings,
   signal?: AbortSignal,
+  onProgress?: (progress: number) => void,
 ) {
-  const run = pending.catch(() => {}).then(() => reconcile(app, settings, signal));
+  const run = pending.catch(() => {}).then(() => reconcile(app, settings, signal, onProgress));
   pending = run;
   return run;
 }
 
-async function reconcile(app: AppService, settings: WebDAVSettings, signal?: AbortSignal) {
+async function reconcile(
+  app: AppService,
+  settings: WebDAVSettings,
+  signal?: AbortSignal,
+  onProgress?: (progress: number) => void,
+) {
   signal?.throwIfAborted();
   if (!useLibraryStore.getState().libraryLoaded) {
     useLibraryStore.getState().setLibrary(await app.loadLibraryBooks());
   }
-  const catalog = await scanWebDAVLibrary(settings, signal);
+  const catalog = await scanWebDAVLibrary(settings, signal, (progress) =>
+    onProgress?.(progress * 0.4),
+  );
   signal?.throwIfAborted();
   const libraryId = getWebDAVLibraryId(settings);
   const key = `readest:webdav-catalog:v1:${libraryId}`;
@@ -93,7 +101,7 @@ async function reconcile(app: AppService, settings: WebDAVSettings, signal?: Abo
         size: entry.size,
         lastModified: entry.lastModified,
       };
-      if (++completed % 20 === 0) checkpoint();
+      if ((completed + 1) % 20 === 0) checkpoint();
     } catch {
       signal?.throwIfAborted();
       failedBooks.push(entry.path);
@@ -101,6 +109,7 @@ async function reconcile(app: AppService, settings: WebDAVSettings, signal?: Abo
       const previous = index[entry.path];
       if (previous) present.set(entry.path, previous.hash);
     }
+    onProgress?.(0.4 + (++completed / Math.max(1, catalog.entries.length)) * 0.6);
   }
   checkpoint();
   signal?.throwIfAborted();

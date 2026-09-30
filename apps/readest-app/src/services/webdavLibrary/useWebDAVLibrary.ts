@@ -6,6 +6,8 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { isTauriAppPlatform } from '@/services/environment';
 import { eventDispatcher } from '@/utils/event';
 import { reconcileWebDAVLibrary } from './reconcile';
+import { getActiveFileSyncBackends } from '@/services/sync/cloudSyncProvider';
+import { WEB_DAV_SCAN_FINISHED, useWebDAVSyncProgress } from './syncProgress';
 
 /** App entry, reconnect and foreground refresh; no network work in the shelf. */
 export function useWebDAVLibrary() {
@@ -30,9 +32,24 @@ export function useWebDAVLibrary() {
         return;
       running = true;
       lastScan = Date.now();
+      const tracker = useWebDAVSyncProgress.getState();
+      const syncEnabled = getActiveFileSyncBackends(useSettingsStore.getState().settings).includes(
+        'webdav',
+      );
+      const version = tracker.beginScan(syncEnabled);
       try {
         const app = await envConfig.getAppService();
-        const result = await reconcileWebDAVLibrary(app, settings, controller.signal);
+        const result = await reconcileWebDAVLibrary(app, settings, controller.signal, (progress) =>
+          tracker.updateScan(version, progress),
+        );
+        if (controller.signal.aborted) {
+          tracker.finishScan(version, false);
+          return;
+        }
+        tracker.finishScan(version, !result.failedDirectories.length && !result.failedBooks.length);
+        // Always sync after discovery, even when no books changed. A pass that
+        // raced the scan cannot certify the newly discovered server state.
+        if (syncEnabled) void eventDispatcher.dispatch(WEB_DAV_SCAN_FINISHED);
         if (
           !controller.signal.aborted &&
           (result.failedDirectories.length || result.failedBooks.length)
@@ -45,6 +62,7 @@ export function useWebDAVLibrary() {
           });
         }
       } catch {
+        tracker.finishScan(version, false);
         // Offline/auth failures preserve the previous shelf and its local cache.
       } finally {
         running = false;

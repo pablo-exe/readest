@@ -24,6 +24,7 @@ import {
 } from '@/services/sync/file/providerRegistry';
 import { createAppLocalStore } from '@/services/sync/file/appLocalStore';
 import { FileSyncEngine, type SyncLibraryResult } from '@/services/sync/file/engine';
+import { useWebDAVSyncProgress } from '@/services/webdavLibrary/syncProgress';
 
 /**
  * Whether a backend's transport can work at all right now. Web Google Drive
@@ -73,10 +74,11 @@ const buildEngine = async (
 };
 
 /** One backend's library sync. Throws; the caller isolates the failure. */
-const syncOneBackend = async (
+const executeBackendSync = async (
   envConfig: EnvConfigType,
   kind: FileSyncBackendKind,
   _: TranslationFunc,
+  progressVersion?: number,
 ): Promise<SyncLibraryResult | null> => {
   const appService = await envConfig.getAppService();
   const current = useSettingsStore.getState().settings;
@@ -103,6 +105,10 @@ const syncOneBackend = async (
     concurrency: 6,
     deviceId,
     onProgress: ({ index, total, action }) => {
+      if (kind === 'webdav' && progressVersion !== undefined) {
+        const tracker = useWebDAVSyncProgress.getState();
+        tracker.updateSync(progressVersion, (index + 1) / Math.max(1, total));
+      }
       const label = action === 'downloading' ? _('Downloading') : _('Uploading');
       useFileSyncStore
         .getState()
@@ -120,6 +126,24 @@ const syncOneBackend = async (
     await appService.saveSettings(next);
   }
   return result;
+};
+
+const syncOneBackend = async (
+  envConfig: EnvConfigType,
+  kind: FileSyncBackendKind,
+  _: TranslationFunc,
+): Promise<SyncLibraryResult | null> => {
+  if (kind !== 'webdav') return executeBackendSync(envConfig, kind, _);
+  const tracker = useWebDAVSyncProgress.getState();
+  const version = tracker.beginSync();
+  let success = false;
+  try {
+    const result = await executeBackendSync(envConfig, kind, _, version);
+    success = !!result && !result.failures && !result.indexPushFailed;
+    return result;
+  } finally {
+    tracker.finishSync(version, success);
+  }
 };
 
 /**

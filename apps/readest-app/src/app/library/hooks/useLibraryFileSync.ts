@@ -7,6 +7,12 @@ import { useLibraryStore } from '@/store/libraryStore';
 import { debounce } from '@/utils/debounce';
 import { getActiveFileSyncBackends } from '@/services/sync/cloudSyncProvider';
 import { runFileLibrarySyncPass } from '@/services/sync/file/runLibrarySync';
+import { useFileSyncStore } from '@/store/fileSyncStore';
+import { eventDispatcher } from '@/utils/event';
+import {
+  WEB_DAV_SCAN_FINISHED,
+  useWebDAVSyncProgress,
+} from '@/services/webdavLibrary/syncProgress';
 
 /**
  * Library-scoped auto-sync for every enabled third-party cloud backend (#5062) —
@@ -38,7 +44,9 @@ export const useLibraryFileSync = () => {
   const libraryLoaded = useLibraryStore((s) => s.libraryLoaded);
   const { userProfilePlan } = useQuotaStats();
 
-  const hasBackends = getActiveFileSyncBackends(settings, userProfilePlan ?? 'free').length > 0;
+  const backends = getActiveFileSyncBackends(settings, userProfilePlan ?? 'free');
+  const hasBackends = backends.length > 0;
+  const hasWebDAV = backends.includes('webdav');
 
   // Keep one stable debounced trigger that always calls the latest pass (via
   // ref), so it isn't recreated — and lost — on every settings change.
@@ -52,6 +60,33 @@ export const useLibraryFileSync = () => {
   // plus the initial load pull.
   useEffect(() => {
     if (!hasBackends || !libraryLoaded) return;
+    if (hasWebDAV) useWebDAVSyncProgress.getState().scheduleSync();
     debouncedSync();
-  }, [library, libraryLoaded, hasBackends, debouncedSync]);
+  }, [library, libraryLoaded, hasBackends, hasWebDAV, debouncedSync]);
+
+  useEffect(() => {
+    const afterScan = () => {
+      if (!hasWebDAV || !libraryLoaded) return;
+      useWebDAVSyncProgress.getState().scheduleSync();
+      debouncedSync();
+    };
+    eventDispatcher.on(WEB_DAV_SCAN_FINISHED, afterScan);
+    // A debounce can fire while another backend holds the mutex. Preserve
+    // the pending WebDAV work and retry once that pass releases it.
+    const unsubscribe = useFileSyncStore.subscribe((state, previous) => {
+      const tracker = useWebDAVSyncProgress.getState();
+      if (
+        previous.activeKind &&
+        !state.activeKind &&
+        tracker.sync === 'pending' &&
+        tracker.scan !== 'running'
+      ) {
+        afterScan();
+      }
+    });
+    return () => {
+      eventDispatcher.off(WEB_DAV_SCAN_FINISHED, afterScan);
+      unsubscribe();
+    };
+  }, [hasWebDAV, libraryLoaded, debouncedSync]);
 };

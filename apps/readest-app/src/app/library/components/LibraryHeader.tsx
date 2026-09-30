@@ -22,6 +22,7 @@ import SettingsMenu from './SettingsMenu';
 import ImportMenu from './ImportMenu';
 import LibrarySearchOptionsMenu from './LibrarySearchOptionsMenu';
 import ViewMenu from './ViewMenu';
+import { WebDAVSyncProgress } from '@/services/webdavLibrary/WebDAVSyncProgress';
 
 interface LibraryHeaderProps {
   isSelectMode: boolean;
@@ -151,6 +152,7 @@ const LibraryHeader: React.FC<LibraryHeaderProps> = ({
                 'focus:outline-hidden focus:ring-0',
               )}
             />
+            <WebDAVSyncProgress />
             {searchTarget === 'text' && (
               <div
                 className={clsx(
