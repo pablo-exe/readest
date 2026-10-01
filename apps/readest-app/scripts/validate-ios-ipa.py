@@ -6,6 +6,7 @@ data avoids differences in PNG compression/metadata introduced by actool.
 import argparse
 import plistlib
 import re
+import shutil
 import struct
 import subprocess
 import tempfile
@@ -37,8 +38,10 @@ def decode_image(path):
     return width, abs(height), pixels
 
 
-def validate_ipa(ipa, icons, decode=decode_image, preview=None):
+def validate_ipa(ipa, icons, decode=decode_image, preview=None, diagnostics=None):
     prefix = 'Payload/Readest.app/'
+    if diagnostics is not None:
+        Path(diagnostics).mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(ipa) as archive, tempfile.TemporaryDirectory() as folder:
         corrupt = archive.testzip()
         if corrupt:
@@ -69,7 +72,30 @@ def validate_ipa(ipa, icons, decode=decode_image, preview=None):
             expected = Path(icons) / f'AppIcon-{size}x{size}@{scale}x.png'
             actual = Path(folder) / compiled
             actual.write_bytes(archive.read(name))
-            if not expected.is_file() or decode(actual) != decode(expected):
+            if not expected.is_file():
+                raise RuntimeError(f'Missing production icon reference: {expected.name}')
+            actual_image = decode(actual)
+            expected_image = decode(expected)
+            if diagnostics is not None:
+                output = Path(diagnostics)
+                shutil.copy2(expected, output / f'expected-{compiled}')
+                subprocess.run(['sips', '-s', 'format', 'png', str(actual),
+                                '--out', str(output / f'packaged-{compiled}')],
+                               check=True, capture_output=True)
+            if actual_image != expected_image:
+                # Keep the comparison strict. Measurements and previews let us
+                # distinguish wrong artwork, dimensions and color conversion.
+                if isinstance(actual_image, tuple) and isinstance(expected_image, tuple):
+                    actual_width, actual_height, actual_pixels = actual_image
+                    expected_width, expected_height, expected_pixels = expected_image
+                    details = (f'actual={actual_width}x{actual_height}, '
+                               f'expected={expected_width}x{expected_height}')
+                    if (actual_width, actual_height) == (expected_width, expected_height):
+                        deltas = [abs(a - b) for a, b in zip(actual_pixels, expected_pixels)]
+                        details += (f', differing_channels={sum(d != 0 for d in deltas)}'
+                                    f'/{len(deltas)}, max_delta={max(deltas, default=0)}, '
+                                    f'mean_delta={sum(deltas) / max(1, len(deltas)):.6f}')
+                    print(f'Icon mismatch: {compiled}: {details}', flush=True)
                 raise RuntimeError(f'Packaged app icon does not match the production icon: {compiled}')
             checked += 1
             if size == '60' and not ipad:
@@ -87,5 +113,6 @@ if __name__ == '__main__':
     parser.add_argument('ipa', type=Path)
     parser.add_argument('icons', type=Path)
     parser.add_argument('--icon-preview', type=Path)
+    parser.add_argument('--diagnostics', type=Path)
     args = parser.parse_args()
-    validate_ipa(args.ipa, args.icons, preview=args.icon_preview)
+    validate_ipa(args.ipa, args.icons, preview=args.icon_preview, diagnostics=args.diagnostics)
