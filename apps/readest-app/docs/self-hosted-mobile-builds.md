@@ -37,7 +37,19 @@ registry availability. Dependency versions remain controlled by `Cargo.lock`.
 
 ## Recovery
 
-A failed run publishes no IPA. Fix or retry the relevant workflow, preserving
+Only a successfully validated IPA is published as `readest-ios-selfhosted-unsigned`.
+The unvalidated build and icon references are retained for three days as
+`readest-ios-candidate-unvalidated`, so a validator failure does not discard
+half an hour of compilation. A failed icon comparison also retains normalized
+PNG previews as `readest-ios-icon-diagnostics` and logs the dimensions and
+channel differences. Rust cache is saved even if package validation fails.
+
+At `edc2531a3`, Android built and uploaded successfully. iOS compiled, but the
+strict comparison failed for `AppIcon76x76@2x~ipad.png`. The cause of that pixel
+mismatch remains pending until the new diagnostics are available; do not relax
+the comparison without examining the packaged image and release reference.
+
+ Fix or retry the relevant workflow, preserving
 the icon generation order and package validation. To roll back build changes,
 revert the workflow/validator commit and build the chosen source revision;
 there is no server data migration involved.

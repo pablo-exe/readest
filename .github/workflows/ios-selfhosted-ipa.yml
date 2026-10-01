@@ -49,6 +49,7 @@ jobs:
         uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
         with:
           workspaces: . -> target
+          cache-on-failure: true
 
       - name: Fetch locked Rust dependencies before Xcode build
         run: cargo fetch --locked --target aarch64-apple-ios
@@ -74,12 +75,34 @@ jobs:
       - name: Build unsigned IPA with self-hosted features
         run: pnpm tauri ios build --no-sign --ci
 
+      - name: Preserve compiled candidate for independent validation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: readest-ios-candidate-unvalidated
+          path: |
+            apps/readest-app/src-tauri/gen/apple/build/arm64/Readest.ipa
+            apps/readest-app/src-tauri/icons/ios/
+            apps/readest-app/src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/
+          if-no-files-found: error
+          retention-days: 3
+
       - name: Validate installable IPA structure
+        id: validate-ipa
         run: |
           python3 apps/readest-app/scripts/validate-ios-ipa.py \
             apps/readest-app/src-tauri/gen/apple/build/arm64/Readest.ipa \
             apps/readest-app/src-tauri/icons/ios \
-            --icon-preview apps/readest-app/src-tauri/gen/apple/build/arm64/verified-app-icon.png
+            --icon-preview apps/readest-app/src-tauri/gen/apple/build/arm64/verified-app-icon.png \
+            --diagnostics artifacts/ios-icon-diagnostics
+
+      - name: Preserve icon diagnostics if validation fails
+        if: failure() && steps.validate-ipa.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: readest-ios-icon-diagnostics
+          path: artifacts/ios-icon-diagnostics/
+          if-no-files-found: warn
+          retention-days: 3
 
       - name: Upload IPA
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
