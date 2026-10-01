@@ -1,10 +1,11 @@
-"""Validate bundle metadata and compare the packaged iPhone icon with release assets.
+"""Validate bundle metadata and compare packaged iPhone/iPad icons with release assets.
 
 sips decodes Apple's optimized PNGs on the macOS runner. Comparing BMP pixel
 data avoids differences in PNG compression/metadata introduced by actool.
 """
 import argparse
 import plistlib
+import re
 import struct
 import subprocess
 import tempfile
@@ -54,23 +55,31 @@ def validate_ipa(ipa, icons, decode=decode_image, preview=None):
         if primary.get('CFBundleIconName') != 'AppIcon' or not primary.get('CFBundleIconFiles'):
             raise RuntimeError('Missing primary app icon declaration')
         checked = 0
-        for scale in (2, 3):
-            compiled = f'AppIcon60x60@{scale}x.png'
-            name = prefix + compiled
-            if name not in archive.namelist():
+        iphone_checked = False
+        icon_pattern = re.compile(r'AppIcon(\d+(?:\.\d+)?)x\1(?:@([123])x)?(~ipad)?\.png')
+        for name in archive.namelist():
+            if not name.startswith(prefix):
                 continue
-            expected = Path(icons) / f'AppIcon-60x60@{scale}x.png'
+            compiled = name[len(prefix):]
+            match = icon_pattern.fullmatch(compiled)
+            if not match:
+                continue
+            size, scale, ipad = match.groups()
+            scale = scale or '1'
+            expected = Path(icons) / f'AppIcon-{size}x{size}@{scale}x.png'
             actual = Path(folder) / compiled
             actual.write_bytes(archive.read(name))
-            if decode(actual) != decode(expected):
+            if not expected.is_file() or decode(actual) != decode(expected):
                 raise RuntimeError(f'Packaged app icon does not match the production icon: {compiled}')
             checked += 1
-            if preview is not None:
-                subprocess.run(['sips', '-s', 'format', 'png', str(actual), '--out', str(preview)],
-                               check=True, capture_output=True)
-        if not checked:
+            if size == '60' and not ipad:
+                iphone_checked = True
+                if preview is not None:
+                    subprocess.run(['sips', '-s', 'format', 'png', str(actual), '--out', str(preview)],
+                                   check=True, capture_output=True)
+        if not iphone_checked:
             raise RuntimeError('Missing packaged iPhone app icon')
-        print(f'Validated IPA bundle and {checked} production iPhone icon(s).')
+        print(f'Validated IPA bundle and {checked} production app icon(s), including iPad icons when present.')
 
 
 if __name__ == '__main__':
