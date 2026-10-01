@@ -67,9 +67,11 @@ jobs:
           cd apps/readest-app
           rm -rf src-tauri/gen/android
           pnpm tauri android init
-          pnpm tauri icon ../../data/icons/readest-book.png
           # Restore the Android project customizations tracked by this repo.
           git checkout -- .
+          # Generate LAST: restoring tracked resources otherwise revives the
+          # old adaptive/monochrome launcher configuration.
+          pnpm tauri icon ../../data/icons/readest-book.png
 
       - name: Build installable ARM64 debug APK
         env:
