@@ -38,6 +38,26 @@ def decode_image(path):
     return width, abs(height), pixels
 
 
+def icons_match(actual, expected):
+    """Allow only sparse one-level rounding in Apple's image conversion.
+
+    At most 0.1% of RGB channels may differ, each by at most 1/255.
+    Dimensions, channel count and substantial artwork changes remain strict.
+    """
+    if actual == expected:
+        return True
+    if not isinstance(actual, tuple) or not isinstance(expected, tuple):
+        return False
+    width, height, pixels = actual
+    expected_width, expected_height, expected_pixels = expected
+    if (width, height) != (expected_width, expected_height):
+        return False
+    if len(pixels) != width * height * 3 or len(expected_pixels) != len(pixels):
+        return False
+    deltas = [abs(a - b) for a, b in zip(pixels, expected_pixels)]
+    return max(deltas, default=0) <= 1 and sum(d != 0 for d in deltas) * 1000 <= len(deltas)
+
+
 def validate_ipa(ipa, icons, decode=decode_image, preview=None, diagnostics=None):
     prefix = 'Payload/Readest.app/'
     if diagnostics is not None:
@@ -82,9 +102,8 @@ def validate_ipa(ipa, icons, decode=decode_image, preview=None, diagnostics=None
                 subprocess.run(['sips', '-s', 'format', 'png', str(actual),
                                 '--out', str(output / f'packaged-{compiled}')],
                                check=True, capture_output=True)
-            if actual_image != expected_image:
-                # Keep the comparison strict. Measurements and previews let us
-                # distinguish wrong artwork, dimensions and color conversion.
+            if not icons_match(actual_image, expected_image):
+                # Report differences exceeding the bounded rounding allowance.
                 if isinstance(actual_image, tuple) and isinstance(expected_image, tuple):
                     actual_width, actual_height, actual_pixels = actual_image
                     expected_width, expected_height, expected_pixels = expected_image
