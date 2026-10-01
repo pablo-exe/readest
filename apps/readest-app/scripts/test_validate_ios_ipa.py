@@ -10,6 +10,33 @@ validator = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(validator)
 
 
+class IconComparison(unittest.TestCase):
+    def image(self, changes=(), width=152, height=152):
+        pixels = bytearray([128]) * (width * height * 3)
+        for index, delta in changes:
+            pixels[index] += delta
+        return width, height, bytes(pixels)
+
+    def test_identical_pixels_pass(self):
+        self.assertTrue(validator.icons_match(self.image(), self.image()))
+
+    def test_observed_ipad_rounding_passes(self):
+        self.assertTrue(validator.icons_match(self.image(((100, 1), (200, -1))), self.image()))
+
+    def test_two_level_difference_fails(self):
+        self.assertFalse(validator.icons_match(self.image(((100, 2),)), self.image()))
+
+    def test_widespread_one_level_changes_fail(self):
+        self.assertFalse(validator.icons_match(self.image(tuple((i, 1) for i in range(70))), self.image()))
+
+    def test_dimension_change_fails(self):
+        self.assertFalse(validator.icons_match(self.image(width=153), self.image()))
+
+    def test_truncated_pixels_fail(self):
+        width, height, pixels = self.image()
+        self.assertFalse(validator.icons_match((width, height, pixels[:-1]), self.image()))
+
+
 class ValidateIPA(unittest.TestCase):
     def test_release_icon_and_valid_bundle_pass(self):
         self.check(b'production')

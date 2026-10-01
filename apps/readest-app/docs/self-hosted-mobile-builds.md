@@ -44,10 +44,14 @@ half an hour of compilation. A failed icon comparison also retains normalized
 PNG previews as `readest-ios-icon-diagnostics` and logs the dimensions and
 channel differences. Rust cache is saved even if package validation fails.
 
-At `edc2531a3`, Android built and uploaded successfully. iOS compiled, but the
-strict comparison failed for `AppIcon76x76@2x~ipad.png`. The cause of that pixel
-mismatch remains pending until the new diagnostics are available; do not relax
-the comparison without examining the packaged image and release reference.
+At `1b509d0f0`, iOS compiled successfully. The validator rejected the 152x152
+packaged iPad icon because two of its 69,312 RGB channels differed by one
+level out of 255 after Apple's image decoding. The comparison now permits
+at most 0.1% of channels to differ by at most one level; dimensions and pixel
+counts must match. Larger or widespread changes still fail. Regression tests
+cover this measured case, different artwork, dimensions and truncated data.
+The archived candidate is also revalidated on macOS with the current script,
+independently of the new complete build.
 
  Fix or retry the relevant workflow, preserving
 the icon generation order and package validation. To roll back build changes,
