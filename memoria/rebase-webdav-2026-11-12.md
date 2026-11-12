@@ -6,7 +6,8 @@
 - Rebase aplicado sobre `readest/readest:main` (`upstream/main`, SHA `a60b7eee0892f5533edbaca7d6391cd3609e4173`). La rama conserva 17 commits previos y añade dos correcciones puntuales.
 - El código rebasado y las dos correcciones quedaron en `510a99914189ca815f6d1716a994dc30eaf95bd5`; después se añadió el commit de documentación `b9eb7e9e32a5d7890daa042d3184e6efa269006a`.
 - El historial remoto anterior se sustituyó con `--force-with-lease`, condicionado al SHA anterior `9464aa236b3277ebef82acb04bc11b0585280e2d`.
-- Merge en `pablo-exe/readest:main` mediante fast-forward desde `44ce62250e9f5a80b91fc967dc331abdcdb4bfd7` hasta `b9eb7e9e32a5d7890daa042d3184e6efa269006a`. La revisión final de esta nota se publicó después de forma atómica en ambas ramas; se verificó que sus referencias quedaran idénticas.
+- Merge en `pablo-exe/readest:main` mediante fast-forward desde `44ce62250e9f5a80b91fc967dc331abdcdb4bfd7`; el merge y las revisiones de documentación posteriores llegaron a `e1c59046d4917e7fb5e0b2c02c62f51179b365cb`.
+- A petición del usuario, se borró `codex/ios-selfhosted-ipa` del fork después de verificar que `main` ya contenía su HEAD. También se borraron las copias locales de esa rama y de `backup/webdav-before-rebase`. La única rama local y remota del fork es `main`.
 - No se hizo push ni merge en `readest/readest`; `upstream/main` se usó únicamente como base del rebase.
 
 ## Conflictos resueltos
@@ -25,5 +26,5 @@
 
 ## Pendiente
 
-- Revisar los resultados de CI del nuevo HEAD. La integración está hecha en el fork; no se evaluó la aceptación upstream ni se abrió un PR.
+- Revisar los resultados de CI del nuevo HEAD. La integración está hecha directamente en la `main` del fork; no se abrió PR ni se modificó el upstream.
 - El hook de `pre-push` sigue necesitando una comprobación del formateo compatible con Windows (`core.autocrlf=true`) y de la suite completa, que conserva fallos de entorno/fixtures descritos arriba.
