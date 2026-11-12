@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build-ios:
-    runs-on: macos-15-intel
+    runs-on: macos-26-intel
     timeout-minutes: 90
     env:
       NEXT_PUBLIC_SELF_HOSTED: 'true'
@@ -24,6 +24,13 @@ jobs:
         with:
           submodules: recursive
           persist-credentials: false
+
+      - name: Verify Xcode 26 SDK
+        run: |
+          xcodebuild -version
+          sdk_version=$(xcrun --sdk iphoneos --show-sdk-version)
+          echo "iOS SDK: $sdk_version"
+          [[ "${sdk_version%%.*}" -ge 26 ]]
 
       - name: Run IPA validator regression tests
         run: python3 -m unittest discover -s apps/readest-app/scripts -p test_validate_ios_ipa.py -v
