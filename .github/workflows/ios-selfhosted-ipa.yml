@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build-ios:
-    runs-on: macos-latest
+    runs-on: macos-15-intel
     timeout-minutes: 90
     env:
       NEXT_PUBLIC_SELF_HOSTED: 'true'
