@@ -23,8 +23,11 @@ vi.mock('@/store/libraryStore', () => ({
     select({ libraryLoaded: mocks.loaded }),
 }));
 vi.mock('@/store/settingsStore', () => ({
-  useSettingsStore: (select: (s: { settings: { webdav: typeof settings } }) => unknown) =>
-    select({ settings: { webdav: settings } }),
+  useSettingsStore: Object.assign(
+    (select: (s: { settings: { webdav: typeof settings } }) => unknown) =>
+      select({ settings: { webdav: settings } }),
+    { getState: () => ({ settings: { webdav: settings } }) },
+  ),
 }));
 vi.mock('@/hooks/useTranslation', () => ({ useTranslation: () => (text: string) => text }));
 vi.mock('@/utils/event', () => ({ eventDispatcher: { dispatch: mocks.toast } }));
